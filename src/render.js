@@ -1,0 +1,356 @@
+// Screen renderers. Markup and inline styles are ported verbatim from the
+// design (MyCoffee.dc.html). Interactions use data-act attributes resolved by
+// event delegation in main.js. Lists/conditionals are plain JS.
+
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+// ---- Google attribution (required on screens that show Places data off-map) ----
+// You must drop the official Google logo at public/google-on-white.png.
+// See the runbook. This strip satisfies the "logo when displayed without a
+// Google Map" requirement for Discover / Search / Saved.
+function attribution() {
+  return `
+    <div style="display:flex; align-items:center; gap:8px; padding:18px 0 4px; opacity:0.9;">
+      <img src="/google-on-white.png" alt="Powered by Google" height="16"
+           style="height:16px; width:auto; display:block;" />
+      <span style="font-size:10px; color:#A98C6B; letter-spacing:0.04em;">Results from Google</span>
+    </div>`;
+}
+
+// ---- shared bits ----
+export function statusBar() {
+  return `
+    <div style="flex:0 0 auto; height:50px; display:flex; align-items:center; justify-content:space-between; padding:0 30px; color:#2E2017; font-size:14px; font-weight:600;">
+      <span>9:41</span>
+      <span style="display:flex; gap:6px; align-items:center;">
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="#2E2017"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+        <svg width="22" height="12" viewBox="0 0 24 12" fill="none"><rect x="0.5" y="0.5" width="20" height="11" rx="3" stroke="#2E2017"/><rect x="2" y="2" width="15" height="8" rx="1.5" fill="#2E2017"/><rect x="21.5" y="4" width="2" height="4" rx="1" fill="#2E2017"/></svg>
+      </span>
+    </div>`;
+}
+
+function heartSvg(size, fill, stroke) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="${stroke}" stroke-width="1.7"><path d="M12 20s-7-4.6-7-9.7A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7 3.3C19 15.4 12 20 12 20z"/></svg>`;
+}
+
+function metaLine(shop, withOpen) {
+  const open = withOpen && shop.openLabel
+    ? `<span style="color:#C8B79E;">·</span><span style="color:${shop.openColor};">${esc(shop.openLabel)}</span>` : '';
+  const dist = shop.distStr
+    ? `<span style="color:#C8B79E;">·</span><span>${esc(shop.distStr)}</span>` : '';
+  return `
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:12px; color:#6F5942;">
+      <span style="color:#2E2017; font-weight:700;">★ ${esc(shop.ratingStr)}</span>
+      <span style="color:#A98C6B;">${esc(shop.reviewsStr)} ratings</span>
+      ${dist}
+      ${open}
+    </div>`;
+}
+
+// Big row (Discover + Saved). rank is a 2-char string or null.
+function bigRow(shop, rank) {
+  const badge = rank ? `<div style="position:absolute; top:-8px; left:-8px; font-family:'Libre Caslon Display',serif; font-size:13px; color:#fff; background:#2E2017; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${esc(rank)}</div>` : '';
+  const eyebrow = shop.hood
+    ? `${esc(shop.specialty)} · ${esc(shop.hood)}`
+    : `${esc(shop.specialty)}`;
+  return `
+    <div style="display:flex; gap:16px; align-items:center; padding:20px 0; border-bottom:1px solid #ECE3D7;">
+      <div style="position:relative; flex:0 0 auto;">
+        <div style="width:76px; height:76px; border-radius:16px; background:${shop.tone}; overflow:hidden; position:relative;">
+          <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
+          <div style="position:absolute; bottom:0; left:0; right:0; height:40%; background:linear-gradient(transparent, rgba(34,23,16,0.35));"></div>
+        </div>
+        ${badge}
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:#A98C6B; font-weight:600; margin-bottom:5px;">${eyebrow}</div>
+        <div style="font-family:'Libre Caslon Display',serif; font-size:21px; line-height:1.05; color:#2E2017; margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(shop.name)}</div>
+        ${metaLine(shop, true)}
+      </div>
+      <button data-act="toggle-fav" data-id="${esc(shop.id)}" style="flex:0 0 auto; background:none; border:none; cursor:pointer; padding:6px;">
+        ${heartSvg(22, shop.heartFill, shop.heartStroke)}
+      </button>
+    </div>`;
+}
+
+// Smaller row (Search results).
+function smallRow(shop) {
+  return `
+    <div style="display:flex; gap:14px; align-items:center; padding:18px 0; border-bottom:1px solid #ECE3D7;">
+      <div style="width:60px; height:60px; flex:0 0 auto; border-radius:14px; background:${shop.tone}; position:relative; overflow:hidden;">
+        <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:#A98C6B; font-weight:600; margin-bottom:4px;">${esc(shop.specialty)}${shop.hood ? ' · ' + esc(shop.hood) : ''}</div>
+        <div style="font-family:'Libre Caslon Display',serif; font-size:19px; line-height:1.05; color:#2E2017; margin-bottom:6px;">${esc(shop.name)}</div>
+        ${metaLine(shop, false)}
+      </div>
+      <button data-act="toggle-fav" data-id="${esc(shop.id)}" style="flex:0 0 auto; background:none; border:none; cursor:pointer; padding:6px;">
+        ${heartSvg(20, shop.heartFill, shop.heartStroke)}
+      </button>
+    </div>`;
+}
+
+function loadingBlock(label) {
+  return `
+    <div style="padding:60px 0; text-align:center; color:#93795D;">
+      <div style="width:28px; height:28px; margin:0 auto 16px; border:3px solid #E4D9CB; border-top-color:#2E2017; border-radius:50%; animation:mc-spin 0.8s linear infinite;"></div>
+      <div style="font-size:13.5px;">${esc(label || 'Finding good coffee near you…')}</div>
+    </div>`;
+}
+
+function errorBlock(message, retryAct) {
+  const retry = retryAct
+    ? `<button data-act="${retryAct}" style="margin-top:14px; border:1px solid #E0CFB8; background:none; color:#8A6A4C; font-weight:600; font-size:13px; padding:11px 20px; border-radius:12px; cursor:pointer;">Try again</button>` : '';
+  return `
+    <div style="padding:50px 0; text-align:center; color:#93795D;">
+      <div style="font-family:'Libre Caslon Display',serif; font-size:22px; color:#2E2017; margin-bottom:8px;">Hmm.</div>
+      <div style="font-size:13.5px; line-height:1.5; max-width:250px; margin:0 auto;">${esc(message)}</div>
+      ${retry}
+    </div>`;
+}
+
+// ===================== ONBOARDING =====================
+export function onboarding() {
+  return `
+    <div style="position:absolute; inset:0; background:#2E2017; color:#F6F0E8; display:flex; flex-direction:column; overflow:hidden;">
+      <div style="position:absolute; top:-80px; right:-60px; width:320px; height:320px; border-radius:50%; background:radial-gradient(circle at 30% 30%, #4A3526, #2E2017 70%);"></div>
+      <div style="position:absolute; bottom:140px; left:-90px; width:240px; height:240px; border-radius:50%; border:1px solid rgba(246,240,232,0.12);"></div>
+      <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; padding:0 34px 26px; position:relative; z-index:2;">
+        <div style="font-size:11px; letter-spacing:0.32em; text-transform:uppercase; color:#C2A789; margin-bottom:22px; font-weight:600;">MyCoffee · Est. Here</div>
+        <div style="font-family:'Libre Caslon Display',serif; font-size:64px; line-height:0.98; letter-spacing:-0.01em;">Good<br>coffee,<br><span style="font-style:italic; color:#D8B891;">now.</span></div>
+        <div style="font-size:15px; line-height:1.55; color:rgba(246,240,232,0.66); margin-top:22px; max-width:280px;">Find the best cups within walking distance. Sorted by what people actually love.</div>
+      </div>
+      <div style="padding:0 34px 46px; position:relative; z-index:2;">
+        <div style="display:flex; align-items:center; gap:12px; padding:16px 18px; border:1px solid rgba(246,240,232,0.16); border-radius:16px; margin-bottom:16px; background:rgba(246,240,232,0.04);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D8B891" stroke-width="1.6"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          <div style="font-size:13px; line-height:1.35; color:rgba(246,240,232,0.8);">Share your location to see shops near <strong style="color:#F6F0E8;">you</strong>.</div>
+        </div>
+        <button data-act="use-location" style="width:100%; border:none; background:#F6F0E8; color:#2E2017; font-weight:600; font-size:16px; padding:17px; border-radius:16px; cursor:pointer;">Use my location</button>
+        <button data-act="maybe-later" style="width:100%; border:none; background:transparent; color:rgba(246,240,232,0.55); font-weight:500; font-size:14px; padding:16px; cursor:pointer; margin-top:4px;">Maybe later</button>
+      </div>
+    </div>`;
+}
+
+// ===================== HOME / DISCOVER =====================
+export function home(state) {
+  const tabs = [['rating', 'Top rated'], ['popular', 'Popular'], ['distance', 'Closest']]
+    .map(([k, label]) => {
+      const on = state.sort === k;
+      return `<button data-act="set-sort" data-sort="${k}" style="background:none; border:none; cursor:pointer; font-size:13px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:0 0 12px; color:${on ? '#2E2017' : '#B9A78F'}; border-bottom:2px solid ${on ? '#2E2017' : 'transparent'}; white-space:nowrap; flex:0 0 auto;">${label}</button>`;
+    }).join('');
+
+  let body;
+  const nb = state.nearby;
+  if (nb.status === 'loading' || nb.status === 'idle') body = loadingBlock();
+  else if (nb.status === 'error') body = errorBlock(nb.error || 'Could not load nearby shops.', 'retry-nearby');
+  else if (!nb.shops.length) body = errorBlock('No coffee shops found near here. Try searching a different area.', 'retry-nearby');
+  else body = nb.shops.map((s, i) => bigRow(s, String(i + 1).padStart(2, '0'))).join('') + attribution();
+
+  return `
+    <div style="padding:8px 24px 120px;">
+      <div style="font-size:11px; letter-spacing:0.3em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:10px;">Good coffee, now</div>
+      <div style="font-family:'Libre Caslon Display',serif; font-size:46px; line-height:0.95; color:#2E2017;">Discover</div>
+      <button data-act="go-search" style="display:flex; align-items:center; gap:6px; color:#6F5942; font-size:13px; margin-top:14px; background:none; border:none; padding:0; cursor:pointer; white-space:nowrap;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        <span style="font-weight:600; color:#2E2017;">${esc(state.location)}</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div style="display:flex; align-items:center; gap:22px; margin:26px 0 6px; border-bottom:1px solid #E4D9CB;">${tabs}</div>
+      ${body}
+    </div>`;
+}
+
+// ===================== SEARCH =====================
+export function search(state) {
+  return `
+    <div style="padding:8px 24px 120px;">
+      <div style="font-family:'Libre Caslon Display',serif; font-size:40px; line-height:0.95; color:#2E2017; margin-bottom:18px;">Search</div>
+      <div style="display:flex; align-items:center; gap:10px; background:#FFFCF7; border:1px solid #E0D2BF; border-radius:15px; padding:13px 15px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="mc-search-input" class="mc-in" value="${esc(state.query)}" placeholder="Shops, neighborhoods, cities…" style="flex:1; border:none; outline:none; background:none; font-size:15px; color:#2E2017; min-width:0;" />
+        <button id="mc-clear" data-act="clear-query" style="background:none; border:none; cursor:pointer; padding:0; color:#B09877; display:${state.query ? 'flex' : 'none'};"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div id="mc-search-body">${searchBody(state)}</div>
+    </div>`;
+}
+
+// Rendered standalone too, for live updates without losing input focus.
+export function searchBody(state) {
+  const q = (state.query || '').trim();
+  if (!q) return browseAreas();
+
+  const r = state.results;
+  if (r.status === 'loading' || r.status === 'idle') return loadingBlock('Searching…');
+  if (r.status === 'error') return errorBlock(r.error || 'Search failed.', 'retry-search');
+  if (!r.shops.length) {
+    return `
+      <div style="padding:50px 0; text-align:center; color:#93795D;">
+        <div style="font-family:'Libre Caslon Display',serif; font-size:22px; color:#2E2017; margin-bottom:6px;">No matches</div>
+        <div style="font-size:13.5px;">Try another shop or neighborhood.</div>
+      </div>`;
+  }
+  const label = r.shops.length + (r.shops.length === 1 ? ' result' : ' results');
+  return `
+    <div style="font-size:11px; letter-spacing:0.24em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin:26px 0 4px;">${label}</div>
+    ${r.shops.map(smallRow).join('')}
+    ${attribution()}`;
+}
+
+// Static "browse by area" affordance. With live data there are no fixed
+// neighborhoods, so this offers location actions instead.
+function browseAreas() {
+  const rows = [
+    { act: 'use-location', icon: '◎', name: 'Near me', sub: 'Use my current location' },
+  ];
+  return `
+    <div>
+      <div style="font-size:11px; letter-spacing:0.24em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin:30px 0 6px;">Browse</div>
+      ${rows.map(a => `
+        <button data-act="${a.act}" style="width:100%; display:flex; align-items:center; gap:14px; padding:17px 0; border:none; border-bottom:1px solid #ECE3D7; background:none; cursor:pointer; text-align:left;">
+          <div style="width:42px; height:42px; flex:0 0 auto; border-radius:12px; background:#EBE0CF; display:flex; align-items:center; justify-content:center; color:#8A6A4C;">${a.icon}</div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:16px; color:#2E2017; font-weight:600;">${a.name}</div>
+            <div style="font-size:12.5px; color:#93795D; margin-top:2px;">${a.sub}</div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+        </button>`).join('')}
+      <div style="font-size:12.5px; color:#A98C6B; margin-top:18px; line-height:1.5;">Type a shop or neighborhood above to search.</div>
+    </div>`;
+}
+
+// ===================== MAP =====================
+// The canvas (#mc-map-canvas) is filled by the Google Maps SDK in map.js.
+export function map(state) {
+  return `
+    <div style="position:absolute; inset:0; overflow:hidden; background:#E3D6C3;">
+      <div id="mc-map-canvas" style="position:absolute; inset:0;"></div>
+      <div style="position:absolute; top:14px; left:20px; right:20px; z-index:8; display:flex; align-items:center; gap:10px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:16px; padding:13px 16px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.3);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span style="font-size:14px; color:#8A715A;">${esc(state.location)}</span>
+      </div>
+      <div id="mc-map-card" style="position:absolute; left:16px; right:16px; bottom:16px; z-index:9;">${mapCard(state)}</div>
+    </div>`;
+}
+
+// Bottom detail card. Re-rendered on selection without touching the map.
+export function mapCard(state) {
+  const shops = state.nearby.shops || [];
+  if (!shops.length) return '';
+  const sel = shops.find(s => s.id === state.selected) || shops[0];
+  return `
+    <div style="background:#FFFCF7; border:1px solid #EADFD0; border-radius:22px; padding:16px; box-shadow:0 18px 40px -14px rgba(46,32,23,0.45); animation:mc-slideup 0.4s cubic-bezier(0.2,0.7,0.2,1);">
+      <div style="display:flex; gap:14px; align-items:center;">
+        <div style="width:78px; height:78px; flex:0 0 auto; border-radius:16px; background:${sel.tone}; position:relative; overflow:hidden;">
+          <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:#A98C6B; font-weight:600; margin-bottom:4px;">${esc(sel.specialty)}${sel.hood ? ' · ' + esc(sel.hood) : ''}</div>
+          <div style="font-family:'Libre Caslon Display',serif; font-size:23px; line-height:1.0; color:#2E2017; margin-bottom:7px;">${esc(sel.name)}</div>
+          ${metaLine(sel, false)}
+        </div>
+        <button data-act="toggle-fav" data-id="${esc(sel.id)}" style="flex:0 0 auto; background:none; border:none; cursor:pointer; padding:6px; align-self:flex-start;">
+          ${heartSvg(22, sel.heartFill, sel.heartStroke)}
+        </button>
+      </div>
+      <button data-act="directions" data-id="${esc(sel.id)}" style="margin-top:14px; width:100%; border:none; background:#2E2017; color:#F6F0E8; font-weight:600; font-size:14px; padding:13px; border-radius:13px; cursor:pointer;">Directions${sel.distStr ? ' · ' + esc(sel.distStr) : ''}</button>
+    </div>`;
+}
+
+// ===================== FAVORITES =====================
+export function favorites(state) {
+  const sv = state.saved;
+  const count = (state.favs || []).length;
+  const countStr = count + (count === 1 ? ' place you love' : ' places you love');
+
+  let body;
+  if (!count) {
+    body = `
+      <div style="margin-top:70px; text-align:center;">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="1.4" style="margin-bottom:14px;"><path d="M12 20s-7-4.6-7-9.7A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7 3.3C19 15.4 12 20 12 20z"/></svg>
+        <div style="font-family:'Libre Caslon Display',serif; font-size:24px; color:#2E2017; margin-bottom:8px;">Nothing saved yet</div>
+        <div style="font-size:14px; color:#93795D; line-height:1.5; max-width:230px; margin:0 auto;">Tap the heart on any shop to keep it here for later.</div>
+      </div>`;
+  } else if (sv.status === 'loading' || sv.status === 'idle') {
+    body = loadingBlock('Loading your places…');
+  } else if (sv.status === 'error') {
+    body = errorBlock(sv.error || 'Could not load saved shops.', 'retry-saved');
+  } else {
+    body = `<div style="margin-top:18px;">${sv.shops.map(s => bigRow(s, null)).join('')}</div>${attribution()}`;
+  }
+
+  return `
+    <div style="padding:8px 24px 120px;">
+      <div style="font-size:11px; letter-spacing:0.3em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:10px;">Your collection</div>
+      <div style="font-family:'Libre Caslon Display',serif; font-size:46px; line-height:0.95; color:#2E2017;">Saved</div>
+      <div style="font-size:13px; color:#6F5942; margin-top:12px;">${countStr}</div>
+      ${body}
+    </div>`;
+}
+
+// ===================== PROFILE =====================
+export function profile(state) {
+  const stats = [
+    { value: String((state.favs || []).length), label: 'Saved' },
+    { value: '23', label: 'Reviews' },
+    { value: '48', label: 'Visited' },
+  ];
+  const settings = [
+    { d: ['M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z', 'M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'], label: 'Location', value: esc(state.location) },
+    { d: ['M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8', 'M13.7 21a2 2 0 0 1-3.4 0'], label: 'Notifications', value: 'On' },
+    { d: ['M2 7h20v12H2z', 'M2 10h20'], label: 'Payment', value: '' },
+    { d: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.7-2.5 2-2.5 3.5', 'M12 17h.01'], label: 'Help & support', value: '' },
+  ];
+  const ico = (paths) => `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">${paths.map(d => `<path d="${d}"/>`).join('')}</svg>`;
+
+  return `
+    <div style="padding:8px 24px 120px;">
+      <div style="display:flex; align-items:center; gap:16px; margin-top:6px;">
+        <div style="width:70px; height:70px; border-radius:50%; background:#2E2017; color:#F6F0E8; font-family:'Libre Caslon Display',serif; font-size:28px; display:flex; align-items:center; justify-content:center;">J</div>
+        <div>
+          <div style="font-family:'Libre Caslon Display',serif; font-size:28px; color:#2E2017; line-height:1;">Jordan Ellis</div>
+          <div style="font-size:13px; color:#93795D; margin-top:6px;">San Francisco · Member since '24</div>
+        </div>
+      </div>
+      <div style="display:flex; margin-top:26px; border:1px solid #E4D9CB; border-radius:18px; overflow:hidden; background:#FFFCF7;">
+        ${stats.map(st => `
+          <div style="flex:1; padding:16px 8px; text-align:center; border-left:1px solid #EEE4D6;">
+            <div style="font-family:'Libre Caslon Display',serif; font-size:26px; color:#2E2017;">${st.value}</div>
+            <div style="font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-top:4px;">${st.label}</div>
+          </div>`).join('')}
+      </div>
+      <div style="font-size:11px; letter-spacing:0.24em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin:30px 0 4px;">Settings</div>
+      ${settings.map(row => `
+        <div style="display:flex; align-items:center; gap:14px; padding:17px 0; border-bottom:1px solid #ECE3D7;">
+          <div style="color:#6F5942; display:flex;">${ico(row.d)}</div>
+          <div style="flex:1; font-size:15.5px; color:#2E2017; font-weight:500;">${row.label}</div>
+          <div style="font-size:13px; color:#A98C6B; white-space:nowrap;">${row.value}</div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+        </div>`).join('')}
+      <button style="margin-top:26px; width:100%; border:1px solid #E0CFB8; background:none; color:#8A6A4C; font-weight:600; font-size:14px; padding:15px; border-radius:14px; cursor:pointer; letter-spacing:0.04em;">Sign out</button>
+    </div>`;
+}
+
+// ===================== BOTTOM NAV =====================
+export function bottomNav(screen) {
+  const c = (n) => (screen === n ? '#2E2017' : '#B9A78F');
+  const tab = (act, name, svg) => `
+    <button data-act="${act}" style="flex:1; background:none; border:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:5px; padding:4px 2px;">
+      ${svg}
+      <span style="font-size:9.5px; letter-spacing:0.06em; text-transform:uppercase; font-weight:600; color:${c(name)};">${labelFor(name)}</span>
+    </button>`;
+  return `
+    <div style="flex:0 0 auto; height:86px; background:rgba(246,240,232,0.94); backdrop-filter:blur(12px); border-top:1px solid #E4D9CB; display:flex; align-items:flex-start; padding:12px 6px 0;">
+      ${tab('go-home', 'home', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('home')}" stroke-width="1.7"><path d="M4 10.5 12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/></svg>`)}
+      ${tab('go-search', 'search', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('search')}" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`)}
+      ${tab('go-map', 'map', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('map')}" stroke-width="1.7"><path d="M9 4 3 6.5v13.5L9 17.5l6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>`)}
+      ${tab('go-fav', 'favorites', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('favorites')}" stroke-width="1.7"><path d="M12 20s-7-4.6-7-9.7A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7 3.3C19 15.4 12 20 12 20z"/></svg>`)}
+      ${tab('go-profile', 'profile', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('profile')}" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>`)}
+    </div>`;
+}
+
+function labelFor(name) {
+  return { home: 'Discover', search: 'Search', map: 'Map', favorites: 'Saved', profile: 'Profile' }[name];
+}
