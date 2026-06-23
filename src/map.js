@@ -7,6 +7,7 @@ import { MAPS_BROWSER_KEY } from './config.js';
 let loaderPromise = null;
 let mapInstance = null;
 let markers = new Map(); // id -> { marker, el }
+let userMarker = null;
 
 export function loadSdk() {
   if (loaderPromise) return loaderPromise;
@@ -74,6 +75,7 @@ export async function mountMap({ center, shops, selectedId, onSelect }) {
     });
     mapInstance.__canvas = canvas;
     markers = new Map();
+    userMarker = null;
   } else {
     mapInstance.setCenter(center);
   }
@@ -110,6 +112,44 @@ export async function mountMap({ center, shops, selectedId, onSelect }) {
   }
 
   if (shops.length) mapInstance.fitBounds(bounds, 64);
+}
+
+// Pan to the user and show a small blue dot, like map apps.
+export async function panToUser(coords) {
+  if (!coords || !mapInstance) return false;
+
+  let google;
+  try {
+    google = await loadSdk();
+  } catch (e) {
+    return false;
+  }
+
+  const { AdvancedMarkerElement } = await google.maps.importLibrary('marker');
+
+  mapInstance.panTo(coords);
+  mapInstance.setZoom(16);
+
+  const dotWrap = document.createElement('div');
+  dotWrap.style.cssText = 'width:18px; height:18px; position:relative;';
+  dotWrap.innerHTML = `
+    <div style="position:absolute; inset:0; border-radius:50%; background:rgba(46,98,196,0.18); animation:mc-pulse 1.8s ease-out infinite;"></div>
+    <div style="position:absolute; top:50%; left:50%; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; background:#2E62C4; border:2px solid #fff; box-shadow:0 2px 8px rgba(46,98,196,0.45);"></div>`;
+
+  if (userMarker) {
+    userMarker.position = coords;
+    userMarker.content = dotWrap;
+  } else {
+    userMarker = new AdvancedMarkerElement({
+      map: mapInstance,
+      position: coords,
+      content: dotWrap,
+      gmpClickable: false,
+      zIndex: 1000,
+    });
+  }
+
+  return true;
 }
 
 export function highlight(selectedId, byId) {

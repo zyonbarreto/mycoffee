@@ -1,6 +1,6 @@
 // Geolocation + distance utilities.
 
-export function getPosition() {
+export function getPosition(opts = {}) {
   return new Promise((resolve, reject) => {
     if (!('geolocation' in navigator)) {
       reject(new Error('GEO_UNSUPPORTED'));
@@ -12,7 +12,11 @@ export function getPosition() {
         // 1 = permission denied, 2 = unavailable, 3 = timeout
         reject(new Error(err.code === 1 ? 'GEO_DENIED' : 'GEO_FAILED'));
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: opts.fresh ? 0 : 60000,
+      }
     );
   });
 }

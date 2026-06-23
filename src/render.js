@@ -231,6 +231,9 @@ export function map(state) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <span style="font-size:14px; color:#8A715A;">${esc(state.location)}</span>
       </div>
+      <button data-act="map-locate-me" aria-label="Center on my location" style="position:absolute; right:16px; bottom:168px; z-index:10; width:46px; height:46px; border-radius:14px; border:1px solid #E4D9CB; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
       <div id="mc-map-card" style="position:absolute; left:16px; right:16px; bottom:16px; z-index:9;">${mapCard(state)}</div>
     </div>`;
 }

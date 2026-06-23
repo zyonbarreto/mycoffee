@@ -2,7 +2,7 @@ import * as R from './render.js';
 import { decorate, sortList } from './model.js';
 import { getPosition } from './geo.js';
 import { fetchNearby, fetchSearch, fetchDetails } from './api.js';
-import { mountMap, highlight, openDirections } from './map.js';
+import { mountMap, highlight, openDirections, panToUser } from './map.js';
 import { load, save } from './storage.js';
 import { DEFAULTS } from './config.js';
 
@@ -246,6 +246,26 @@ function directions(id) {
   openDirections(shop);
 }
 
+async function mapLocateMe() {
+  try {
+    const coords = await getPosition({ fresh: true });
+    state.userCoords = coords;
+    state.location = 'Near me';
+    persist();
+    const ok = await panToUser(coords);
+    if (!ok && state.screen === 'map') render();
+  } catch (e) {
+    if (state.userCoords && state.screen === 'map') {
+      await panToUser(state.userCoords);
+      return;
+    }
+    const msg = e.message === 'GEO_DENIED'
+      ? 'Location is off. Allow it in your browser settings.'
+      : 'Could not get your location right now.';
+    alert(msg);
+  }
+}
+
 function clearQuery() {
   state.query = '';
   state.results = { status: 'idle', raw: [], error: '' };
@@ -272,6 +292,7 @@ root.addEventListener('click', (e) => {
     case 'toggle-fav': toggleFav(id); break;
     case 'select-pin': selectPin(id); break;
     case 'directions': directions(id); break;
+    case 'map-locate-me': mapLocateMe(); break;
     case 'clear-query': clearQuery(); break;
     case 'retry-nearby': loadNearby(); break;
     case 'retry-search': runSearch(); break;
