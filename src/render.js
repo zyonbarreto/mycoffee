@@ -158,6 +158,9 @@ export function onboarding() {
 // Discover list with its sort tabs; once the user types, the same body region
 // swaps to search results. Clearing the query returns to the Discover list.
 export function home(state) {
+  const q = (state.query || '').trim();
+  if (!q && state.discoverView === 'map') return discoverMapView(state);
+
   return `
     <div style="padding:8px 24px 120px;">
       <div style="font-size:11px; letter-spacing:0.3em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:10px;">Good coffee, now</div>
@@ -200,6 +203,15 @@ export function searchBody(state) {
     ${attribution()}`;
 }
 
+// List / Map toggle for the Discover browse view (hidden during search).
+function discoverViewToggle(active) {
+  const btn = (view, label) => {
+    const on = active === view;
+    return `<button data-act="set-discover-view" data-view="${view}" style="background:${on ? '#2E2017' : 'none'}; border:1px solid ${on ? '#2E2017' : '#E0D2BF'}; cursor:pointer; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; padding:7px 12px; border-radius:10px; color:${on ? '#F6F0E8' : '#8A715A'}; white-space:nowrap;">${label}</button>`;
+  };
+  return `<div style="display:flex; gap:6px; flex:0 0 auto;">${btn('list', 'List')}${btn('map', 'Map')}</div>`;
+}
+
 // The Discover browse experience: sort tabs plus the ranked nearby list.
 function discoverList(state) {
   const tabs = [['rating', 'Top rated'], ['popular', 'Popular'], ['distance', 'Closest']]
@@ -223,7 +235,10 @@ function discoverList(state) {
   else body = nb.shops.map((s, i) => bigRow(s, String(i + 1).padStart(2, '0'))).join('') + attribution();
 
   return `
-    <div style="display:flex; align-items:center; gap:22px; margin:26px 0 6px; border-bottom:1px solid #E4D9CB;">${tabs}</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin:26px 0 6px; border-bottom:1px solid #E4D9CB;">
+      <div style="display:flex; align-items:center; gap:22px; min-width:0; overflow-x:auto;">${tabs}</div>
+      ${discoverViewToggle('list')}
+    </div>
     ${body}`;
 }
 
@@ -317,21 +332,34 @@ export function detail(state) {
     </div>`;
 }
 
-// ===================== MAP =====================
+// ===================== DISCOVER MAP SUB-VIEW =====================
+// Read-only map of nearby shops. Opened from the List/Map toggle on Discover.
 // The canvas (#mc-map-canvas) is filled by the Google Maps SDK in map.js.
-export function map(state) {
+export function discoverMapView(state) {
+  const nb = state.nearby;
+  let statusOverlay = '';
+  if (nb.status === 'loading' || nb.status === 'idle') {
+    statusOverlay = `<div style="position:absolute; inset:0; z-index:6; display:flex; align-items:center; justify-content:center; background:rgba(227,214,195,0.75);">${loadingBlock('Loading nearby shops…')}</div>`;
+  } else if (nb.status === 'error') {
+    const retry = state.userCoords ? 'retry-nearby' : 'use-location';
+    const label = state.userCoords ? 'Try again' : 'Use my location';
+    statusOverlay = `<div style="position:absolute; inset:0; z-index:6; display:flex; align-items:center; justify-content:center; background:rgba(227,214,195,0.92); padding:24px;">${errorBlock(nb.error || 'Could not load nearby shops.', retry, label)}</div>`;
+  } else if (!nb.shops.length) {
+    statusOverlay = `<div style="position:absolute; inset:0; z-index:6; display:flex; align-items:center; justify-content:center; background:rgba(227,214,195,0.92); padding:24px;">${errorBlock('No coffee shops found near here.', 'retry-nearby')}</div>`;
+  }
+
   return `
     <div style="position:absolute; inset:0; overflow:hidden; background:#E3D6C3;">
       <div id="mc-map-canvas" style="position:absolute; inset:0;"></div>
+      ${statusOverlay}
       <div id="mc-map-overlay" style="position:absolute; inset:0; z-index:8; pointer-events:none;">
-        <div style="pointer-events:auto; position:absolute; top:14px; left:20px; right:20px; display:flex; align-items:center; gap:10px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:16px; padding:13px 16px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.3);">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <span style="font-size:14px; color:#8A715A;">${esc(state.location)}</span>
+        <div style="pointer-events:auto; position:absolute; top:14px; left:16px; right:16px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <button data-act="set-discover-view" data-view="list" style="display:flex; align-items:center; gap:8px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:14px; padding:10px 14px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; font-size:13px; font-weight:600; color:#2E2017;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>
+            <span>List</span>
+          </button>
+          ${discoverViewToggle('map')}
         </div>
-        <button id="mc-search-area" type="button" data-act="search-this-area" style="pointer-events:auto; touch-action:manipulation; position:absolute; top:70px; left:50%; transform:translateX(-50%); z-index:9; display:none; align-items:center; gap:7px; background:rgba(246,240,232,0.98); backdrop-filter:blur(8px); border:1.5px solid #CDBBA1; border-radius:999px; padding:10px 18px; box-shadow:0 10px 28px -8px rgba(46,32,23,0.5); color:#2E2017; font-size:13px; font-weight:700; font-family:'Archivo',sans-serif; cursor:pointer; white-space:nowrap;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.9"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
-          <span>Search this area</span>
-        </button>
         <button data-act="map-locate-me" type="button" aria-label="Center on my location" style="pointer-events:auto; touch-action:manipulation; position:absolute; right:16px; bottom:168px; z-index:10; width:46px; height:46px; border-radius:14px; border:1px solid #E4D9CB; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
         </button>
@@ -450,12 +478,11 @@ export function bottomNav(screen) {
   return `
     <div style="flex:0 0 auto; height:86px; background:rgba(246,240,232,0.94); backdrop-filter:blur(12px); border-top:1px solid #E4D9CB; display:flex; align-items:flex-start; padding:12px 6px 0;">
       ${tab('go-home', 'home', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('home')}" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`)}
-      ${tab('go-map', 'map', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('map')}" stroke-width="1.7"><path d="M9 4 3 6.5v13.5L9 17.5l6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>`)}
       ${tab('go-fav', 'favorites', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('favorites')}" stroke-width="1.7"><path d="M12 20s-7-4.6-7-9.7A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7 3.3C19 15.4 12 20 12 20z"/></svg>`)}
       ${tab('go-profile', 'profile', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('profile')}" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>`)}
     </div>`;
 }
 
 function labelFor(name) {
-  return { home: 'Discover', map: 'Map', favorites: 'Saved', profile: 'Profile' }[name];
+  return { home: 'Discover', favorites: 'Saved', profile: 'Profile' }[name];
 }

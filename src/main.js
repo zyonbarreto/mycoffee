@@ -1,8 +1,8 @@
 import * as R from './render.js';
 import { decorate, sortList } from './model.js';
 import { getPosition } from './geo.js';
-import { fetchNearby, fetchNearbyInBounds, fetchSearch, fetchDetails } from './api.js';
-import { mountMap, updateShops, highlight, openDirections, panToUser, getViewportWithRetry, markSearched } from './map.js';
+import { fetchNearby, fetchSearch, fetchDetails } from './api.js';
+import { mountMap, updateShops, highlight, openDirections, panToUser } from './map.js';
 import { load, save } from './storage.js';
 import { DEFAULTS } from './config.js';
 
@@ -13,12 +13,13 @@ const persisted = load();
 const state = {
   screen: persisted.onboarded ? 'home' : 'onboarding',
   onboarded: persisted.onboarded,
+  discoverView: 'list',            // 'list' | 'map' on the Discover tab
   sort: 'rating',
   query: '',
   location: persisted.location,
   favs: persisted.favs,            // array of place_id
   userCoords: null,                // {lat,lng} | null
-  selected: null,                  // place_id for map
+  selected: null,                  // place_id for map pin selection
   detailId: null,                  // place_id for the open detail view
   nearby: { status: 'idle', raw: [], error: '' },
   results: { status: 'idle', raw: [], error: '' },
@@ -29,12 +30,14 @@ const state = {
 let searchToken = 0;
 let savedToken = 0;
 let detailToken = 0;
-let nearbyToken = 0;
 let searchTimer = null;
-let searchAreaBusy = false;
 
 function persist() {
   save({ onboarded: state.onboarded, favs: state.favs, location: state.location });
+}
+
+function isDiscoverMap() {
+  return state.screen === 'home' && state.discoverView === 'map' && !state.query.trim();
 }
 
 // ----- build a decorated "view" of state for the renderers -----
@@ -69,7 +72,7 @@ function render() {
     return;
   }
   const screenHtml = {
-    home: R.home, map: R.map, favorites: R.favorites, profile: R.profile,
+    home: R.home, favorites: R.favorites, profile: R.profile,
     detail: R.detail,
   }[v.screen](v);
 
@@ -89,7 +92,7 @@ function render() {
 }
 
 function afterRender(v) {
-  if (v.screen === 'home') {
+  if (v.screen === 'home' && v.discoverView === 'list') {
     const input = document.getElementById('mc-search-input');
     if (input) {
       input.addEventListener('input', onSearchInput);
@@ -97,22 +100,13 @@ function afterRender(v) {
       const val = input.value; input.value = ''; input.value = val;
     }
   }
-  if (v.screen === 'map') {
+  if (isDiscoverMap()) {
     mountMap({
       center: v.userCoords || DEFAULTS.fallback,
       shops: v.nearby.shops,
       selectedId: v.selected,
       onSelect: selectPin,
-      onViewportChange: handleViewportChange,
     });
-    const searchBtn = document.getElementById('mc-search-area');
-    if (searchBtn) {
-      searchBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        searchThisArea();
-      });
-    }
   }
   if (v.screen === 'detail') setupDetailSwipe();
 }
@@ -180,74 +174,14 @@ async function loadNearby() {
   render();
 }
 
-// Re-query shops for the map's current visible region. Called (debounced) from
-// map.js whenever the map settles after a pan/zoom. Updates the pins and the
-// bottom card in place without remounting the map (which would refit/loop).
-async function loadNearbyInBounds(center, radius) {
-  if (state.screen !== 'map') return false;
-  const token = ++nearbyToken;
-  try {
-    const data = await fetchNearbyInBounds(center.lat, center.lng, radius);
-    if (token !== nearbyToken || state.screen !== 'map') return false;
-    const raw = data.shops || [];
-    state.nearby = { status: 'ready', raw, error: '' };
-    const ids = new Set(raw.map(s => s.id));
-    if (!state.selected || !ids.has(state.selected)) {
-      state.selected = raw.length ? raw[0].id : null;
-    }
-    const v = view();
-    const card = document.getElementById('mc-map-card');
-    if (card) card.innerHTML = R.mapCard(v);
-    updateShops({ shops: v.nearby.shops, selectedId: v.selected, onSelect: selectPin });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-// The map reports whether the visible region has drifted from the last
-// searched area. We only reveal/hide the "Search this area" pill here; we do
-// NOT auto-search (that is the explicit, Google-Maps-style button below).
-function handleViewportChange(moved) {
-  if (state.screen !== 'map') return;
-  const btn = document.getElementById('mc-search-area');
-  if (btn) btn.style.display = moved ? 'flex' : 'none';
-}
-
-async function searchThisArea() {
-  if (searchAreaBusy || state.screen !== 'map') return;
-  searchAreaBusy = true;
-  const btn = document.getElementById('mc-search-area');
-  const vp = await getViewportWithRetry();
-  if (!vp) {
-    searchAreaBusy = false;
-    return;
-  }
-  if (btn) {
-    btn.style.opacity = '0.65';
-    btn.style.pointerEvents = 'none';
-  }
-  const ok = await loadNearbyInBounds(vp.center, vp.radius);
-  if (btn) {
-    btn.style.opacity = '';
-    btn.style.pointerEvents = '';
-  }
-  if (ok) {
-    markSearched(vp);
-    if (btn) btn.style.display = 'none';
-  } else if (btn) {
-    btn.style.display = 'flex';
-  }
-  searchAreaBusy = false;
-}
-
 function onSearchInput(e) {
   state.query = e.target.value;
   const clear = document.getElementById('mc-clear');
   if (clear) clear.style.display = state.query ? 'flex' : 'none';
+  const q = state.query.trim();
+  if (q) state.discoverView = 'list';
   // live update only the body region (keeps input focus)
   const body = document.getElementById('mc-search-body');
-  const q = state.query.trim();
   if (!q) {
     state.results = { status: 'idle', raw: [], error: '' };
     if (body) body.innerHTML = R.searchBody(view());
@@ -299,16 +233,24 @@ async function loadSaved() {
 // ----- interactions -----
 function go(screen) {
   state.screen = screen;
+  if (screen !== 'home') state.discoverView = 'list';
   render();
   if (screen === 'home' && state.nearby.status === 'idle') loadNearby();
-  if (screen === 'map' && state.nearby.status === 'idle') loadNearby();
   if (screen === 'favorites') loadSaved();
+}
+
+function setDiscoverView(view) {
+  if (view !== 'list' && view !== 'map') return;
+  state.discoverView = view;
+  render();
+  if (view === 'map' && state.nearby.status === 'idle') loadNearby();
 }
 
 async function useLocation() {
   state.onboarded = true;
   persist();
   state.screen = 'home';
+  state.discoverView = 'list';
   state.nearby = { status: 'loading', raw: [], error: '' };
   render();
   try {
@@ -332,6 +274,7 @@ function maybeLater() {
   state.onboarded = true;
   persist();
   state.screen = 'home';
+  state.discoverView = 'list';
   state.nearby = { status: 'error', raw: [], error: 'Turn on location, or use Search to find shops.' };
   render();
 }
@@ -341,11 +284,12 @@ function toggleFav(id) {
   state.favs = has ? state.favs.filter(f => f !== id) : [...state.favs, id];
   persist();
 
-  if (state.screen === 'map') {
+  if (isDiscoverMap()) {
     // update only the card + marker styles, keep the map intact
     const v = view();
     const card = document.getElementById('mc-map-card');
     if (card) card.innerHTML = R.mapCard(v);
+    highlight(id, shopsById(v));
     return;
   }
   if (state.screen === 'favorites') {
@@ -415,9 +359,9 @@ async function mapLocateMe() {
     state.location = 'Near me';
     persist();
     const ok = await panToUser(coords);
-    if (!ok && state.screen === 'map') render();
+    if (!ok && isDiscoverMap()) render();
   } catch (e) {
-    if (state.userCoords && state.screen === 'map') {
+    if (state.userCoords && isDiscoverMap()) {
       await panToUser(state.userCoords);
       return;
     }
@@ -447,15 +391,14 @@ root.addEventListener('click', (e) => {
     case 'maybe-later': maybeLater(); break;
     case 'go-home': go('home'); break;
     case 'go-search': go('home'); break;
-    case 'go-map': go('map'); break;
     case 'go-fav': go('favorites'); break;
     case 'go-profile': go('profile'); break;
     case 'set-sort': setSort(btn.getAttribute('data-sort')); break;
+    case 'set-discover-view': setDiscoverView(btn.getAttribute('data-view')); break;
     case 'toggle-fav': toggleFav(id); break;
     case 'select-pin': selectPin(id); break;
     case 'directions': directions(id); break;
     case 'map-locate-me': mapLocateMe(); break;
-    case 'search-this-area': searchThisArea(); break;
     case 'clear-query': clearQuery(); break;
     case 'open-detail': openDetail(id); break;
     case 'close-detail': closeDetail(); break;

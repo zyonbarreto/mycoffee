@@ -1,7 +1,7 @@
 import { MAPS_BROWSER_KEY } from './config.js';
 
 // Loads the Google Maps JS SDK once (maps + marker + places libraries) and
-// renders the real map with pins on the Map tab. The same loader is reused by
+// renders pins on the Discover map sub-view. The same loader is reused by
 // api.js to run the nearby/search lookups in the browser.
 
 let loaderPromise = null;
@@ -9,11 +9,6 @@ let mapInstance = null;
 let markers = new Map(); // id -> { marker, el }
 let userMarker = null;
 let MarkerClass = null;        // AdvancedMarkerElement, cached after first import
-let viewportCallback = null;   // onViewportChange(moved) handler (refreshed each mount)
-let idleTimer = null;          // debounce timer for the map 'idle' event
-let zoomTimer = null;          // debounce timer for zoom-driven viewport checks
-let lastSearchedCenter = null; // center of the area most recently searched
-let lastSearchedRadius = null; // radius (m) of that area, for zoom-change checks
 
 export function loadSdk() {
   if (loaderPromise) return loaderPromise;
@@ -49,20 +44,7 @@ function pillContent(shop, selected) {
   return el;
 }
 
-// Approximate great-circle distance in meters (used to turn the visible map
-// bounds into a center + radius for the nearby query).
-function metersBetween(a, b) {
-  const R = 6371000;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const la1 = a.lat * Math.PI / 180;
-  const la2 = b.lat * Math.PI / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
 // Diff the marker set against `shops`, adding/removing/restyling in place.
-// Does not move the map, so it is safe to call from the idle handler.
 function renderMarkers(shops, selectedId, onSelect) {
   if (!mapInstance || !MarkerClass) return;
   const wanted = new Set(shops.map(s => s.id));
@@ -93,97 +75,8 @@ function renderMarkers(shops, selectedId, onSelect) {
   }
 }
 
-// Read the map's current visible region as a center + radius (meters from the
-// center to the NE corner). Used both for the "Search this area" query and for
-// deciding when the user has moved away from the last searched area.
-// Falls back to center + zoom when getBounds() is not ready yet (common right
-// after mount or during tile load).
-function currentViewport() {
-  if (!mapInstance) return null;
-  const c = mapInstance.getCenter();
-  if (!c) return null;
-  const center = { lat: c.lat(), lng: c.lng() };
-  const b = mapInstance.getBounds();
-  if (b) {
-    const ne = b.getNorthEast();
-    const radius = metersBetween(center, { lat: ne.lat(), lng: ne.lng() });
-    return { center, radius };
-  }
-  const zoom = mapInstance.getZoom() || 15;
-  const radius = Math.max(500, 400000 / Math.pow(2, zoom));
-  return { center, radius };
-}
-
-// Has the visible region drifted meaningfully from the last searched area?
-// True when the center shifts past a fraction of the viewport, or the zoom
-// changes the radius substantially. Thresholds are relative so they behave the
-// same at any zoom level.
-function movedFromBaseline(vp) {
-  if (!lastSearchedCenter) return true;
-  const dist = metersBetween(vp.center, lastSearchedCenter);
-  if (dist > Math.max(100, vp.radius * 0.1)) return true;
-  if (lastSearchedRadius) {
-    const ratio = vp.radius / lastSearchedRadius;
-    if (ratio > 1.18 || ratio < 0.82) return true;
-  }
-  return false;
-}
-
-// Tell the controller whether the visible region has drifted from baseline.
-function notifyViewportMoved() {
-  const vp = currentViewport();
-  if (!vp || !lastSearchedCenter) return;
-  if (viewportCallback) viewportCallback(movedFromBaseline(vp));
-}
-
-// Current viewport for the controller (used by the "Search this area" button).
-export function getViewport() { return currentViewport(); }
-
-// Record an area as freshly searched so the "Search this area" button hides
-// until the user moves away again. Defaults to the current viewport.
-export function markSearched(vp) {
-  const v = vp || currentViewport();
-  if (!v) return;
-  lastSearchedCenter = v.center;
-  lastSearchedRadius = v.radius;
-}
-
-// getBounds() can briefly return null while tiles settle; retry a few times.
-export async function getViewportWithRetry(maxAttempts = 8, delayMs = 80) {
-  for (let i = 0; i < maxAttempts; i++) {
-    const vp = currentViewport();
-    if (vp) return vp;
-    if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, delayMs));
-  }
-  return null;
-}
-
-// Hide the pill and record the current view as the searched baseline.
-function establishBaseline() {
-  const vp = currentViewport();
-  if (!vp) return false;
-  markSearched(vp);
-  if (viewportCallback) viewportCallback(false);
-  return true;
-}
-
-// After fitBounds or initial pan, wait for the map to settle then baseline.
-function scheduleBaseline() {
-  if (!mapInstance) return;
-  const listener = mapInstance.addListener('idle', () => {
-    listener.remove();
-    if (establishBaseline()) return;
-    let attempts = 0;
-    const retry = () => {
-      if (establishBaseline() || ++attempts >= 10) return;
-      idleTimer = setTimeout(retry, 100);
-    };
-    idleTimer = setTimeout(retry, 50);
-  });
-}
-
-// center: {lat,lng}; shops: decorated list; selectedId; onSelect(id); onViewportChange(moved)
-export async function mountMap({ center, shops, selectedId, onSelect, onViewportChange }) {
+// center: {lat,lng}; shops: decorated list; selectedId; onSelect(id)
+export async function mountMap({ center, shops, selectedId, onSelect }) {
   const canvas = document.getElementById('mc-map-canvas');
   if (!canvas) return;
 
@@ -203,16 +96,10 @@ export async function mountMap({ center, shops, selectedId, onSelect, onViewport
   const { Map } = await google.maps.importLibrary('maps');
   const { AdvancedMarkerElement } = await google.maps.importLibrary('marker');
   MarkerClass = AdvancedMarkerElement;
-  // Keep the viewport handler current; the listener (added once below) reads
-  // this. Each (re)mount re-baselines after the map settles so the pill only
-  // appears once the user actually moves away from the current view.
-  viewportCallback = onViewportChange || null;
 
   const isNewMap = !mapInstance || mapInstance.__canvas !== canvas;
 
   if (isNewMap) {
-    lastSearchedCenter = null;
-    lastSearchedRadius = null;
     mapInstance = new Map(canvas, {
       center,
       zoom: 15,
@@ -224,25 +111,11 @@ export async function mountMap({ center, shops, selectedId, onSelect, onViewport
     mapInstance.__canvas = canvas;
     markers = new Map();
     userMarker = null;
-
-    // Reveal the pill as soon as the user pans or zooms away from baseline.
-    mapInstance.addListener('dragend', notifyViewportMoved);
-    mapInstance.addListener('zoom_changed', () => {
-      clearTimeout(zoomTimer);
-      zoomTimer = setTimeout(notifyViewportMoved, 200);
-    });
-    // Also check after the map settles (covers programmatic moves and inertia).
-    mapInstance.addListener('idle', () => {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(notifyViewportMoved, 250);
-    });
   }
 
   renderMarkers(shops, selectedId, onSelect);
 
-  // Only fit and baseline on first mount; revisiting the Map tab keeps the
-  // user's pan position and the search pill state intact.
-  if (isNewMap || !lastSearchedCenter) {
+  if (isNewMap) {
     const bounds = new google.maps.LatLngBounds();
     bounds.extend(center);
     for (const shop of shops) {
@@ -253,12 +126,10 @@ export async function mountMap({ center, shops, selectedId, onSelect, onViewport
     } else {
       mapInstance.setCenter(center);
     }
-    scheduleBaseline();
   }
 }
 
 // Update only the pins (and selection) for the current map, without moving it.
-// Called by the controller after a viewport re-query.
 export function updateShops({ shops, selectedId, onSelect }) {
   renderMarkers(shops || [], selectedId, onSelect);
 }
