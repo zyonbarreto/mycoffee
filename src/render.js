@@ -66,14 +66,14 @@ function metaLine(shop, withOpen) {
 // opens the shop detail view; the heart button keeps its own action (closest
 // data-act wins on click).
 function bigRow(shop, rank) {
-  const badge = rank ? `<div style="position:absolute; top:-8px; left:-8px; font-family:'Libre Caslon Display',serif; font-size:13px; color:#fff; background:#2E2017; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${esc(rank)}</div>` : '';
+  const badge = rank ? `<div style="position:absolute; top:-8px; left:-8px; font-family:'Libre Caslon Display',serif; font-size:11px; color:#fff; background:#2E2017; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${esc(rank)}</div>` : '';
   const eyebrow = shop.hood
     ? `${esc(shop.specialty)} · ${esc(shop.hood)}`
     : `${esc(shop.specialty)}`;
   return `
-    <div data-act="open-detail" data-id="${esc(shop.id)}" style="display:flex; gap:16px; align-items:center; padding:20px 0; border-bottom:1px solid #ECE3D7; cursor:pointer;">
+    <div data-act="open-detail" data-id="${esc(shop.id)}" style="display:flex; gap:12px; align-items:center; padding:16px 0; border-bottom:1px solid #ECE3D7; cursor:pointer;">
       <div style="position:relative; flex:0 0 auto;">
-        <div style="width:76px; height:76px; border-radius:16px; background:${shop.tone}; overflow:hidden; position:relative;">
+        <div style="width:68px; height:68px; border-radius:14px; background:${shop.tone}; overflow:hidden; position:relative;">
           ${photoImg(shop)}
           <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
           <div style="position:absolute; bottom:0; left:0; right:0; height:40%; background:linear-gradient(transparent, rgba(34,23,16,0.35));"></div>
@@ -81,12 +81,12 @@ function bigRow(shop, rank) {
         ${badge}
       </div>
       <div style="flex:1; min-width:0;">
-        <div style="font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:#A98C6B; font-weight:600; margin-bottom:5px;">${eyebrow}</div>
-        <div style="font-family:'Libre Caslon Display',serif; font-size:21px; line-height:1.05; color:#2E2017; margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(shop.name)}</div>
+        <div style="font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:#A98C6B; font-weight:600; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${eyebrow}</div>
+        <div style="font-family:'Libre Caslon Display',serif; font-size:18px; line-height:1.05; color:#2E2017; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(shop.name)}</div>
         ${metaLine(shop, true)}
       </div>
-      <button data-act="toggle-fav" data-id="${esc(shop.id)}" style="flex:0 0 auto; background:none; border:none; cursor:pointer; padding:6px;">
-        ${heartSvg(22, shop.heartFill, shop.heartStroke)}
+      <button data-act="toggle-fav" data-id="${esc(shop.id)}" style="flex:0 0 auto; background:none; border:none; cursor:pointer; padding:4px;">
+        ${heartSvg(20, shop.heartFill, shop.heartStroke)}
       </button>
     </div>`;
 }
@@ -162,17 +162,17 @@ export function home(state) {
   if (!q && state.discoverView === 'map') return discoverMapView(state);
 
   return `
-    <div style="padding:8px 24px 120px;">
-      <div style="font-size:11px; letter-spacing:0.3em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:10px;">Good coffee, now</div>
-      <div style="font-family:'Libre Caslon Display',serif; font-size:46px; line-height:0.95; color:#2E2017;">Discover</div>
-      <button data-act="use-location" aria-label="Use my location" style="display:flex; align-items:center; gap:6px; color:#6F5942; font-size:13px; margin-top:14px; white-space:nowrap; background:none; border:none; padding:0; cursor:pointer;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
-        <span style="font-weight:600; color:#2E2017;">${esc(state.location)}</span>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+    <div style="padding:8px 20px 120px; overflow-x:hidden;">
+      <div style="font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:8px;">Good coffee, now</div>
+      <div style="font-family:'Libre Caslon Display',serif; font-size:38px; line-height:0.95; color:#2E2017;">Discover</div>
+      <button data-act="use-location" aria-label="Use my location" style="display:flex; align-items:center; gap:5px; color:#6F5942; font-size:12px; margin-top:12px; max-width:100%; background:none; border:none; padding:0; cursor:pointer;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8" style="flex:0 0 auto;"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        <span style="font-weight:600; color:#2E2017; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${esc(state.location)}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="2" style="flex:0 0 auto;"><path d="m9 6 6 6-6 6"/></svg>
       </button>
-      <div style="display:flex; align-items:center; gap:10px; background:#FFFCF7; border:1px solid #E0D2BF; border-radius:15px; padding:13px 15px; margin-top:18px;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="mc-search-input" class="mc-in" value="${esc(state.query)}" placeholder="Shops, neighborhoods, cities…" style="flex:1; border:none; outline:none; background:none; font-size:15px; color:#2E2017; min-width:0;" />
+      <div style="display:flex; align-items:center; gap:8px; background:#FFFCF7; border:1px solid #E0D2BF; border-radius:14px; padding:11px 13px; margin-top:16px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.9" style="flex:0 0 auto;"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="mc-search-input" class="mc-in" value="${esc(state.query)}" placeholder="Shops, neighborhoods, cities…" style="flex:1; border:none; outline:none; background:none; font-size:14px; color:#2E2017; min-width:0;" />
         <button id="mc-clear" data-act="clear-query" style="background:none; border:none; cursor:pointer; padding:0; color:#B09877; display:${state.query ? 'flex' : 'none'};"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
       <div id="mc-search-body">${searchBody(state)}</div>
@@ -207,9 +207,9 @@ export function searchBody(state) {
 function discoverViewToggle(active) {
   const btn = (view, label) => {
     const on = active === view;
-    return `<button data-act="set-discover-view" data-view="${view}" style="background:${on ? '#2E2017' : 'none'}; border:1px solid ${on ? '#2E2017' : '#E0D2BF'}; cursor:pointer; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; padding:7px 12px; border-radius:10px; color:${on ? '#F6F0E8' : '#8A715A'}; white-space:nowrap;">${label}</button>`;
+    return `<button data-act="set-discover-view" data-view="${view}" style="background:${on ? '#2E2017' : 'none'}; border:1px solid ${on ? '#2E2017' : '#E0D2BF'}; cursor:pointer; font-size:10px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:6px 10px; border-radius:9px; color:${on ? '#F6F0E8' : '#8A715A'}; white-space:nowrap;">${label}</button>`;
   };
-  return `<div style="display:flex; gap:6px; flex:0 0 auto;">${btn('list', 'List')}${btn('map', 'Map')}</div>`;
+  return `<div style="display:flex; gap:5px; flex:0 0 auto;">${btn('list', 'List')}${btn('map', 'Map')}</div>`;
 }
 
 // The Discover browse experience: sort tabs plus the ranked nearby list.
@@ -217,7 +217,7 @@ function discoverList(state) {
   const tabs = [['rating', 'Top rated'], ['popular', 'Popular'], ['distance', 'Closest']]
     .map(([k, label]) => {
       const on = state.sort === k;
-      return `<button data-act="set-sort" data-sort="${k}" style="background:none; border:none; cursor:pointer; font-size:13px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:0 0 12px; color:${on ? '#2E2017' : '#B9A78F'}; border-bottom:2px solid ${on ? '#2E2017' : 'transparent'}; white-space:nowrap; flex:0 0 auto;">${label}</button>`;
+      return `<button data-act="set-sort" data-sort="${k}" style="background:none; border:none; cursor:pointer; font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; padding:0 0 10px; color:${on ? '#2E2017' : '#B9A78F'}; border-bottom:2px solid ${on ? '#2E2017' : 'transparent'}; white-space:nowrap; flex:0 0 auto;">${label}</button>`;
     }).join('');
 
   let body;
@@ -235,8 +235,8 @@ function discoverList(state) {
   else body = nb.shops.map((s, i) => bigRow(s, String(i + 1).padStart(2, '0'))).join('') + attribution();
 
   return `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin:26px 0 6px; border-bottom:1px solid #E4D9CB;">
-      <div style="display:flex; align-items:center; gap:22px; min-width:0; overflow-x:auto;">${tabs}</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:22px 0 4px; border-bottom:1px solid #E4D9CB; min-width:0;">
+      <div style="display:flex; align-items:center; gap:14px; min-width:0; flex:1;">${tabs}</div>
       ${discoverViewToggle('list')}
     </div>
     ${body}`;
@@ -432,9 +432,8 @@ export function profile(state) {
     { value: '48', label: 'Visited' },
   ];
   const settings = [
-    { d: ['M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z', 'M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'], label: 'Location', value: esc(state.location) },
+    { d: ['M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z', 'M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'], label: 'Location', value: 'Williamsburg' },
     { d: ['M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8', 'M13.7 21a2 2 0 0 1-3.4 0'], label: 'Notifications', value: 'On' },
-    { d: ['M2 7h20v12H2z', 'M2 10h20'], label: 'Payment', value: '' },
     { d: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.7-2.5 2-2.5 3.5', 'M12 17h.01'], label: 'Help & support', value: '' },
   ];
   const ico = (paths) => `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">${paths.map(d => `<path d="${d}"/>`).join('')}</svg>`;
@@ -442,10 +441,10 @@ export function profile(state) {
   return `
     <div style="padding:8px 24px 120px;">
       <div style="display:flex; align-items:center; gap:16px; margin-top:6px;">
-        <div style="width:70px; height:70px; border-radius:50%; background:#2E2017; color:#F6F0E8; font-family:'Libre Caslon Display',serif; font-size:28px; display:flex; align-items:center; justify-content:center;">J</div>
+        <div style="width:70px; height:70px; border-radius:50%; background:#2E2017; color:#F6F0E8; font-family:'Libre Caslon Display',serif; font-size:28px; display:flex; align-items:center; justify-content:center;">Z</div>
         <div>
-          <div style="font-family:'Libre Caslon Display',serif; font-size:28px; color:#2E2017; line-height:1;">Jordan Ellis</div>
-          <div style="font-size:13px; color:#93795D; margin-top:6px;">San Francisco · Member since '24</div>
+          <div style="font-family:'Libre Caslon Display',serif; font-size:28px; color:#2E2017; line-height:1;">Zyon Barreto</div>
+          <div style="font-size:13px; color:#93795D; margin-top:6px;">Williamsburg, off 220 Bushwick Ave</div>
         </div>
       </div>
       <div style="display:flex; margin-top:26px; border:1px solid #E4D9CB; border-radius:18px; overflow:hidden; background:#FFFCF7;">
@@ -477,8 +476,8 @@ export function bottomNav(screen) {
     </button>`;
   return `
     <div style="flex:0 0 auto; height:86px; background:rgba(246,240,232,0.94); backdrop-filter:blur(12px); border-top:1px solid #E4D9CB; display:flex; align-items:flex-start; padding:12px 6px 0;">
-      ${tab('go-home', 'home', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('home')}" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`)}
       ${tab('go-fav', 'favorites', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('favorites')}" stroke-width="1.7"><path d="M12 20s-7-4.6-7-9.7A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7 3.3C19 15.4 12 20 12 20z"/></svg>`)}
+      ${tab('go-home', 'home', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('home')}" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`)}
       ${tab('go-profile', 'profile', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('profile')}" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>`)}
     </div>`;
 }
