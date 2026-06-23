@@ -31,6 +31,7 @@ let savedToken = 0;
 let detailToken = 0;
 let nearbyToken = 0;
 let searchTimer = null;
+let searchAreaBusy = false;
 
 function persist() {
   save({ onboarded: state.onboarded, favs: state.favs, location: state.location });
@@ -104,7 +105,63 @@ function afterRender(v) {
       onSelect: selectPin,
       onViewportChange: handleViewportChange,
     });
+    const searchBtn = document.getElementById('mc-search-area');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        searchThisArea();
+      });
+    }
   }
+  if (v.screen === 'detail') setupDetailSwipe();
+}
+
+// iOS-style swipe right on the detail screen to return to Discover.
+function setupDetailSwipe() {
+  const panel = document.getElementById('mc-detail-panel');
+  if (!panel || panel.__mcSwipe) return;
+  panel.__mcSwipe = true;
+
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+
+  panel.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+    panel.style.transition = '';
+    panel.style.transform = '';
+  }, { passive: true });
+
+  panel.addEventListener('touchmove', (e) => {
+    if (!tracking || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (dx < 8 || Math.abs(dy) > Math.abs(dx) * 0.85) return;
+    panel.style.transform = `translateX(${Math.min(dx, 120)}px)`;
+  }, { passive: true });
+
+  panel.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (dx > 70 && Math.abs(dy) < Math.abs(dx) * 0.85) {
+      panel.style.transition = 'transform 0.18s ease, opacity 0.18s ease';
+      panel.style.transform = 'translateX(100%)';
+      panel.style.opacity = '0.55';
+      setTimeout(() => {
+        if (state.screen === 'detail') closeDetail();
+      }, 160);
+      return;
+    }
+    panel.style.transition = 'transform 0.18s ease';
+    panel.style.transform = '';
+  }, { passive: true });
 }
 
 // ----- data loaders -----
@@ -127,11 +184,11 @@ async function loadNearby() {
 // map.js whenever the map settles after a pan/zoom. Updates the pins and the
 // bottom card in place without remounting the map (which would refit/loop).
 async function loadNearbyInBounds(center, radius) {
-  if (state.screen !== 'map') return;
+  if (state.screen !== 'map') return false;
   const token = ++nearbyToken;
   try {
     const data = await fetchNearbyInBounds(center.lat, center.lng, radius);
-    if (token !== nearbyToken || state.screen !== 'map') return;
+    if (token !== nearbyToken || state.screen !== 'map') return false;
     const raw = data.shops || [];
     state.nearby = { status: 'ready', raw, error: '' };
     const ids = new Set(raw.map(s => s.id));
@@ -142,9 +199,9 @@ async function loadNearbyInBounds(center, radius) {
     const card = document.getElementById('mc-map-card');
     if (card) card.innerHTML = R.mapCard(v);
     updateShops({ shops: v.nearby.shops, selectedId: v.selected, onSelect: selectPin });
+    return true;
   } catch (e) {
-    // Keep whatever is already shown; a transient viewport query failing
-    // should not blank the map.
+    return false;
   }
 }
 
@@ -157,19 +214,31 @@ function handleViewportChange(moved) {
   if (btn) btn.style.display = moved ? 'flex' : 'none';
 }
 
-// Explicit "Search this area" action: query the current map viewport, update
-// pins + bottom card in place, then re-baseline so the button hides again.
 async function searchThisArea() {
-  if (state.screen !== 'map') return;
+  if (searchAreaBusy || state.screen !== 'map') return;
+  searchAreaBusy = true;
   const btn = document.getElementById('mc-search-area');
-  if (btn) btn.style.display = 'none';
   const vp = await getViewportWithRetry();
   if (!vp) {
-    if (btn) btn.style.display = 'flex';
+    searchAreaBusy = false;
     return;
   }
-  await loadNearbyInBounds(vp.center, vp.radius);
-  markSearched(vp);
+  if (btn) {
+    btn.style.opacity = '0.65';
+    btn.style.pointerEvents = 'none';
+  }
+  const ok = await loadNearbyInBounds(vp.center, vp.radius);
+  if (btn) {
+    btn.style.opacity = '';
+    btn.style.pointerEvents = '';
+  }
+  if (ok) {
+    markSearched(vp);
+    if (btn) btn.style.display = 'none';
+  } else if (btn) {
+    btn.style.display = 'flex';
+  }
+  searchAreaBusy = false;
 }
 
 function onSearchInput(e) {

@@ -311,7 +311,7 @@ export function detail(state) {
   else body = detailCard(d.shop);
 
   return `
-    <div style="padding:8px 24px 120px;">
+    <div id="mc-detail-panel" style="padding:8px 24px 120px; min-height:100%; touch-action:pan-y;">
       ${backBar()}
       ${body}
     </div>`;
@@ -323,18 +323,20 @@ export function map(state) {
   return `
     <div style="position:absolute; inset:0; overflow:hidden; background:#E3D6C3;">
       <div id="mc-map-canvas" style="position:absolute; inset:0;"></div>
-      <div style="position:absolute; top:14px; left:20px; right:20px; z-index:8; display:flex; align-items:center; gap:10px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:16px; padding:13px 16px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.3);">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <span style="font-size:14px; color:#8A715A;">${esc(state.location)}</span>
+      <div id="mc-map-overlay" style="position:absolute; inset:0; z-index:8; pointer-events:none;">
+        <div style="pointer-events:auto; position:absolute; top:14px; left:20px; right:20px; display:flex; align-items:center; gap:10px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:16px; padding:13px 16px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.3);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span style="font-size:14px; color:#8A715A;">${esc(state.location)}</span>
+        </div>
+        <button id="mc-search-area" type="button" data-act="search-this-area" style="pointer-events:auto; touch-action:manipulation; position:absolute; top:70px; left:50%; transform:translateX(-50%); z-index:9; display:none; align-items:center; gap:7px; background:rgba(246,240,232,0.98); backdrop-filter:blur(8px); border:1.5px solid #CDBBA1; border-radius:999px; padding:10px 18px; box-shadow:0 10px 28px -8px rgba(46,32,23,0.5); color:#2E2017; font-size:13px; font-weight:700; font-family:'Archivo',sans-serif; cursor:pointer; white-space:nowrap;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.9"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+          <span>Search this area</span>
+        </button>
+        <button data-act="map-locate-me" type="button" aria-label="Center on my location" style="pointer-events:auto; touch-action:manipulation; position:absolute; right:16px; bottom:168px; z-index:10; width:46px; height:46px; border-radius:14px; border:1px solid #E4D9CB; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </button>
+        <div id="mc-map-card" style="pointer-events:auto; position:absolute; left:16px; right:16px; bottom:16px; z-index:9;">${mapCard(state)}</div>
       </div>
-      <button id="mc-search-area" data-act="search-this-area" style="position:absolute; top:70px; left:50%; transform:translateX(-50%); z-index:9; display:none; align-items:center; gap:7px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:999px; padding:9px 16px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.45); color:#2E2017; font-size:13px; font-weight:600; font-family:'Archivo',sans-serif; cursor:pointer; white-space:nowrap;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.9"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
-        <span>Search this area</span>
-      </button>
-      <button data-act="map-locate-me" aria-label="Center on my location" style="position:absolute; right:16px; bottom:168px; z-index:10; width:46px; height:46px; border-radius:14px; border:1px solid #E4D9CB; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-      </button>
-      <div id="mc-map-card" style="position:absolute; left:16px; right:16px; bottom:16px; z-index:9;">${mapCard(state)}</div>
     </div>`;
 }
 

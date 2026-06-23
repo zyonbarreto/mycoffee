@@ -11,6 +11,7 @@ let userMarker = null;
 let MarkerClass = null;        // AdvancedMarkerElement, cached after first import
 let viewportCallback = null;   // onViewportChange(moved) handler (refreshed each mount)
 let idleTimer = null;          // debounce timer for the map 'idle' event
+let zoomTimer = null;          // debounce timer for zoom-driven viewport checks
 let lastSearchedCenter = null; // center of the area most recently searched
 let lastSearchedRadius = null; // radius (m) of that area, for zoom-change checks
 
@@ -120,12 +121,19 @@ function currentViewport() {
 function movedFromBaseline(vp) {
   if (!lastSearchedCenter) return true;
   const dist = metersBetween(vp.center, lastSearchedCenter);
-  if (dist > Math.max(300, vp.radius * 0.25)) return true;
+  if (dist > Math.max(100, vp.radius * 0.1)) return true;
   if (lastSearchedRadius) {
     const ratio = vp.radius / lastSearchedRadius;
-    if (ratio > 1.35 || ratio < 0.65) return true;
+    if (ratio > 1.18 || ratio < 0.82) return true;
   }
   return false;
+}
+
+// Tell the controller whether the visible region has drifted from baseline.
+function notifyViewportMoved() {
+  const vp = currentViewport();
+  if (!vp || !lastSearchedCenter) return;
+  if (viewportCallback) viewportCallback(movedFromBaseline(vp));
 }
 
 // Current viewport for the controller (used by the "Search this area" button).
@@ -200,7 +208,9 @@ export async function mountMap({ center, shops, selectedId, onSelect, onViewport
   // appears once the user actually moves away from the current view.
   viewportCallback = onViewportChange || null;
 
-  if (!mapInstance || mapInstance.__canvas !== canvas) {
+  const isNewMap = !mapInstance || mapInstance.__canvas !== canvas;
+
+  if (isNewMap) {
     lastSearchedCenter = null;
     lastSearchedRadius = null;
     mapInstance = new Map(canvas, {
@@ -215,33 +225,36 @@ export async function mountMap({ center, shops, selectedId, onSelect, onViewport
     markers = new Map();
     userMarker = null;
 
-    // After the map settles (pan/zoom), decide whether to reveal the "Search
-    // this area" button. Updating markers via renderMarkers does not move the
-    // map, so there is no loop.
+    // Reveal the pill as soon as the user pans or zooms away from baseline.
+    mapInstance.addListener('dragend', notifyViewportMoved);
+    mapInstance.addListener('zoom_changed', () => {
+      clearTimeout(zoomTimer);
+      zoomTimer = setTimeout(notifyViewportMoved, 200);
+    });
+    // Also check after the map settles (covers programmatic moves and inertia).
     mapInstance.addListener('idle', () => {
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        const vp = currentViewport();
-        if (!vp || !lastSearchedCenter) return;
-        if (viewportCallback) viewportCallback(movedFromBaseline(vp));
-      }, 300);
+      idleTimer = setTimeout(notifyViewportMoved, 250);
     });
-  }
-
-  const bounds = new google.maps.LatLngBounds();
-  bounds.extend(center);
-  for (const shop of shops) {
-    if (shop.lat != null && shop.lng != null) bounds.extend({ lat: shop.lat, lng: shop.lng });
   }
 
   renderMarkers(shops, selectedId, onSelect);
 
-  if (shops.length) {
-    mapInstance.fitBounds(bounds, 64);
-  } else if (!lastSearchedCenter) {
-    mapInstance.setCenter(center);
+  // Only fit and baseline on first mount; revisiting the Map tab keeps the
+  // user's pan position and the search pill state intact.
+  if (isNewMap || !lastSearchedCenter) {
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend(center);
+    for (const shop of shops) {
+      if (shop.lat != null && shop.lng != null) bounds.extend({ lat: shop.lat, lng: shop.lng });
+    }
+    if (shops.length) {
+      mapInstance.fitBounds(bounds, 64);
+    } else {
+      mapInstance.setCenter(center);
+    }
+    scheduleBaseline();
   }
-  scheduleBaseline();
 }
 
 // Update only the pins (and selection) for the current map, without moving it.
