@@ -2,7 +2,7 @@ import * as R from './render.js';
 import { decorate, sortList } from './model.js';
 import { getPosition } from './geo.js';
 import { fetchNearby, fetchNearbyInBounds, fetchSearch, fetchDetails } from './api.js';
-import { mountMap, updateShops, highlight, openDirections, panToUser } from './map.js';
+import { mountMap, updateShops, highlight, openDirections, panToUser, getViewport, markSearched } from './map.js';
 import { load, save } from './storage.js';
 import { DEFAULTS } from './config.js';
 
@@ -102,7 +102,7 @@ function afterRender(v) {
       shops: v.nearby.shops,
       selectedId: v.selected,
       onSelect: selectPin,
-      onIdle: handleMapIdle,
+      onViewportChange: handleViewportChange,
     });
   }
 }
@@ -148,9 +148,25 @@ async function loadNearbyInBounds(center, radius) {
   }
 }
 
-function handleMapIdle(center, radius) {
+// The map reports whether the visible region has drifted from the last
+// searched area. We only reveal/hide the "Search this area" pill here; we do
+// NOT auto-search (that is the explicit, Google-Maps-style button below).
+function handleViewportChange(moved) {
   if (state.screen !== 'map') return;
-  loadNearbyInBounds(center, radius);
+  const btn = document.getElementById('mc-search-area');
+  if (btn) btn.style.display = moved ? 'flex' : 'none';
+}
+
+// Explicit "Search this area" action: query the current map viewport, update
+// pins + bottom card in place, then re-baseline so the button hides again.
+async function searchThisArea() {
+  if (state.screen !== 'map') return;
+  const vp = getViewport();
+  if (!vp) return;
+  const btn = document.getElementById('mc-search-area');
+  if (btn) btn.style.display = 'none';
+  await loadNearbyInBounds(vp.center, vp.radius);
+  markSearched(vp);
 }
 
 function onSearchInput(e) {
@@ -367,6 +383,7 @@ root.addEventListener('click', (e) => {
     case 'select-pin': selectPin(id); break;
     case 'directions': directions(id); break;
     case 'map-locate-me': mapLocateMe(); break;
+    case 'search-this-area': searchThisArea(); break;
     case 'clear-query': clearQuery(); break;
     case 'open-detail': openDetail(id); break;
     case 'close-detail': closeDetail(); break;

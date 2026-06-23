@@ -9,8 +9,11 @@ let mapInstance = null;
 let markers = new Map(); // id -> { marker, el }
 let userMarker = null;
 let MarkerClass = null;        // AdvancedMarkerElement, cached after first import
-let idleCallback = null;       // latest onIdle handler (refreshed each mount)
+let viewportCallback = null;   // onViewportChange(moved) handler (refreshed each mount)
 let idleTimer = null;          // debounce timer for the map 'idle' event
+let lastSearchedCenter = null; // center of the area most recently searched
+let lastSearchedRadius = null; // radius (m) of that area, for zoom-change checks
+let awaitingBaseline = false;  // set on (re)mount; first idle records the baseline
 
 export function loadSdk() {
   if (loaderPromise) return loaderPromise;
@@ -90,8 +93,50 @@ function renderMarkers(shops, selectedId, onSelect) {
   }
 }
 
-// center: {lat,lng}; shops: decorated list; selectedId; onSelect(id); onIdle(center,radius)
-export async function mountMap({ center, shops, selectedId, onSelect, onIdle }) {
+// Read the map's current visible region as a center + radius (meters from the
+// center to the NE corner). Used both for the "Search this area" query and for
+// deciding when the user has moved away from the last searched area.
+function currentViewport() {
+  if (!mapInstance) return null;
+  const b = mapInstance.getBounds();
+  if (!b) return null;
+  const c = b.getCenter();
+  const ne = b.getNorthEast();
+  const center = { lat: c.lat(), lng: c.lng() };
+  const radius = metersBetween(center, { lat: ne.lat(), lng: ne.lng() });
+  return { center, radius };
+}
+
+// Has the visible region drifted meaningfully from the last searched area?
+// True when the center shifts past a fraction of the viewport, or the zoom
+// changes the radius substantially. Thresholds are relative so they behave the
+// same at any zoom level.
+function movedFromBaseline(vp) {
+  if (!lastSearchedCenter) return true;
+  const dist = metersBetween(vp.center, lastSearchedCenter);
+  if (dist > Math.max(300, vp.radius * 0.25)) return true;
+  if (lastSearchedRadius) {
+    const ratio = vp.radius / lastSearchedRadius;
+    if (ratio > 1.35 || ratio < 0.65) return true;
+  }
+  return false;
+}
+
+// Current viewport for the controller (used by the "Search this area" button).
+export function getViewport() { return currentViewport(); }
+
+// Record an area as freshly searched so the "Search this area" button hides
+// until the user moves away again. Defaults to the current viewport.
+export function markSearched(vp) {
+  const v = vp || currentViewport();
+  if (!v) return;
+  lastSearchedCenter = v.center;
+  lastSearchedRadius = v.radius;
+  awaitingBaseline = false;
+}
+
+// center: {lat,lng}; shops: decorated list; selectedId; onSelect(id); onViewportChange(moved)
+export async function mountMap({ center, shops, selectedId, onSelect, onViewportChange }) {
   const canvas = document.getElementById('mc-map-canvas');
   if (!canvas) return;
 
@@ -111,8 +156,12 @@ export async function mountMap({ center, shops, selectedId, onSelect, onIdle }) 
   const { Map } = await google.maps.importLibrary('maps');
   const { AdvancedMarkerElement } = await google.maps.importLibrary('marker');
   MarkerClass = AdvancedMarkerElement;
-  // Keep the idle handler current; the listener (added once below) reads this.
-  idleCallback = onIdle || null;
+  // Keep the viewport handler current; the listener (added once below) reads
+  // this. Each (re)mount re-baselines: the current view is treated as the
+  // last searched area, so the "Search this area" button only appears once the
+  // user actually moves the map.
+  viewportCallback = onViewportChange || null;
+  awaitingBaseline = true;
 
   if (!mapInstance || mapInstance.__canvas !== canvas) {
     mapInstance = new Map(canvas, {
@@ -127,22 +176,24 @@ export async function mountMap({ center, shops, selectedId, onSelect, onIdle }) 
     markers = new Map();
     userMarker = null;
 
-    // Re-query shops for the visible region after the map settles (pan/zoom).
-    // Debounced so a flick of pans makes one Google call, not many. Updating
+    // After the map settles (pan/zoom), decide whether to reveal the "Search
+    // this area" button instead of auto-searching. The first idle after a
+    // (re)mount records the baseline; later idles compare against it. Updating
     // markers via renderMarkers does not move the map, so there is no loop.
     mapInstance.addListener('idle', () => {
-      if (!idleCallback) return;
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
-        if (!mapInstance || !idleCallback) return;
-        const b = mapInstance.getBounds();
-        if (!b) return;
-        const c = b.getCenter();
-        const ne = b.getNorthEast();
-        const ctr = { lat: c.lat(), lng: c.lng() };
-        const radius = metersBetween(ctr, { lat: ne.lat(), lng: ne.lng() });
-        idleCallback(ctr, radius);
-      }, 400);
+        const vp = currentViewport();
+        if (!vp) return;
+        if (awaitingBaseline) {
+          lastSearchedCenter = vp.center;
+          lastSearchedRadius = vp.radius;
+          awaitingBaseline = false;
+          if (viewportCallback) viewportCallback(false);
+          return;
+        }
+        if (viewportCallback) viewportCallback(movedFromBaseline(vp));
+      }, 300);
     });
   } else {
     mapInstance.setCenter(center);

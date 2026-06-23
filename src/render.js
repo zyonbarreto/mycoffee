@@ -6,6 +6,19 @@ const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
+// Live Place photo, rendered as an <img> that fills its (already rounded,
+// overflow-hidden, position:relative) container and sits behind the existing
+// gradient overlays. The colored `tone` background stays behind it, so the
+// fallback and any load gap look intentional and on brand. When no photo is
+// available, nothing is emitted and only the tone swatch shows. The URL is
+// live and session-only; it is never persisted or cached. `eager` keeps the
+// detail hero from lazy-loading.
+function photoImg(shop, eager) {
+  if (!shop || !shop.photoUrl) return '';
+  const loading = eager ? '' : ' loading="lazy"';
+  return `<img src="${esc(shop.photoUrl)}" alt="${esc(shop.name)}"${loading} style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'" />`;
+}
+
 // ---- Google attribution (required on screens that show Places data off-map) ----
 // You must drop the official Google logo at public/google-on-white.png.
 // See the runbook. This strip satisfies the "logo when displayed without a
@@ -61,6 +74,7 @@ function bigRow(shop, rank) {
     <div data-act="open-detail" data-id="${esc(shop.id)}" style="display:flex; gap:16px; align-items:center; padding:20px 0; border-bottom:1px solid #ECE3D7; cursor:pointer;">
       <div style="position:relative; flex:0 0 auto;">
         <div style="width:76px; height:76px; border-radius:16px; background:${shop.tone}; overflow:hidden; position:relative;">
+          ${photoImg(shop)}
           <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
           <div style="position:absolute; bottom:0; left:0; right:0; height:40%; background:linear-gradient(transparent, rgba(34,23,16,0.35));"></div>
         </div>
@@ -83,6 +97,7 @@ function smallRow(shop) {
   return `
     <div data-act="open-detail" data-id="${esc(shop.id)}" style="display:flex; gap:14px; align-items:center; padding:18px 0; border-bottom:1px solid #ECE3D7; cursor:pointer;">
       <div style="width:60px; height:60px; flex:0 0 auto; border-radius:14px; background:${shop.tone}; position:relative; overflow:hidden;">
+        ${photoImg(shop)}
         <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
       </div>
       <div style="flex:1; min-width:0;">
@@ -268,6 +283,7 @@ function detailCard(shop) {
 
   return `
     <div style="position:relative; width:100%; height:180px; border-radius:22px; background:${shop.tone}; overflow:hidden; margin-bottom:18px;">
+      ${photoImg(shop, true)}
       <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
       <div style="position:absolute; bottom:0; left:0; right:0; height:50%; background:linear-gradient(transparent, rgba(34,23,16,0.45));"></div>
       <button data-act="toggle-fav" data-id="${esc(shop.id)}" style="position:absolute; top:14px; right:14px; background:rgba(246,240,232,0.92); border:none; cursor:pointer; padding:9px; border-radius:50%; display:flex; box-shadow:0 6px 16px -6px rgba(46,32,23,0.5);">
@@ -311,6 +327,10 @@ export function map(state) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <span style="font-size:14px; color:#8A715A;">${esc(state.location)}</span>
       </div>
+      <button id="mc-search-area" data-act="search-this-area" style="position:absolute; top:70px; left:50%; transform:translateX(-50%); z-index:9; display:none; align-items:center; gap:7px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:999px; padding:9px 16px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.45); color:#2E2017; font-size:13px; font-weight:600; font-family:'Archivo',sans-serif; cursor:pointer; white-space:nowrap;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.9"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+        <span>Search this area</span>
+      </button>
       <button data-act="map-locate-me" aria-label="Center on my location" style="position:absolute; right:16px; bottom:168px; z-index:10; width:46px; height:46px; border-radius:14px; border:1px solid #E4D9CB; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
@@ -327,6 +347,7 @@ export function mapCard(state) {
     <div style="background:#FFFCF7; border:1px solid #EADFD0; border-radius:22px; padding:16px; box-shadow:0 18px 40px -14px rgba(46,32,23,0.45); animation:mc-slideup 0.4s cubic-bezier(0.2,0.7,0.2,1);">
       <div style="display:flex; gap:14px; align-items:center;">
         <div style="width:78px; height:78px; flex:0 0 auto; border-radius:16px; background:${sel.tone}; position:relative; overflow:hidden;">
+          ${photoImg(sel)}
           <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
         </div>
         <div style="flex:1; min-width:0;">

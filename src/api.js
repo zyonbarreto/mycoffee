@@ -7,7 +7,7 @@ import { loadSdk } from './map.js';
 
 const FIELDS = [
   'id', 'displayName', 'location', 'rating', 'userRatingCount',
-  'types', 'priceLevel', 'regularOpeningHours',
+  'types', 'priceLevel', 'regularOpeningHours', 'photos',
 ];
 
 // Detail view asks for a few extra fields. These are only requested when a
@@ -29,6 +29,18 @@ function editorialText(p) {
     if (!e) return null;
     if (typeof e === 'string') return e;
     return e.overview || e.text || null;
+  } catch (e) { return null; }
+}
+
+// Build a live, displayable URL for the first place photo via the Places (New)
+// SDK Photo.getURI(). We never persist or cache this URL anywhere (no
+// localStorage, no SW); it is fetched live and rendered into the DOM for the
+// current session only. Returns null when no photo is available.
+function firstPhotoUrl(p) {
+  try {
+    const photo = p.photos && p.photos[0];
+    if (!photo || typeof photo.getURI !== 'function') return null;
+    return photo.getURI({ maxWidth: 800, maxHeight: 600 }) || null;
   } catch (e) { return null; }
 }
 
@@ -57,6 +69,8 @@ async function mapPlace(p) {
     types: p.types || [],
     priceLevel: p.priceLevel != null ? p.priceLevel : null,
     photoName: null,
+    // Live photo URL (session-only, never persisted/cached). Null when absent.
+    photoUrl: firstPhotoUrl(p),
     // Detail-only fields. Null on list results (not requested there).
     editorial: editorialText(p),
     address: p.formattedAddress || null,
@@ -115,6 +129,7 @@ export async function fetchDetails(id) {
   return { shop: await mapPlace(p) };
 }
 
-// Photos are off by default (swatches are the design's fallback). If you turn
-// them on later, request the 'photos' field above and use photo.getURI().
+// Live Place photos are requested via the 'photos' field and resolved per
+// shop in mapPlace() -> photoUrl. The colored swatch (tone) remains the
+// fallback whenever a place has no photo.
 export function photoUrl() { return null; }
