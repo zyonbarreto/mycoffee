@@ -8,6 +8,9 @@ let loaderPromise = null;
 let mapInstance = null;
 let markers = new Map(); // id -> { marker, el }
 let userMarker = null;
+let MarkerClass = null;        // AdvancedMarkerElement, cached after first import
+let idleCallback = null;       // latest onIdle handler (refreshed each mount)
+let idleTimer = null;          // debounce timer for the map 'idle' event
 
 export function loadSdk() {
   if (loaderPromise) return loaderPromise;
@@ -43,8 +46,52 @@ function pillContent(shop, selected) {
   return el;
 }
 
-// center: {lat,lng}; shops: decorated list; selectedId; onSelect(id)
-export async function mountMap({ center, shops, selectedId, onSelect }) {
+// Approximate great-circle distance in meters (used to turn the visible map
+// bounds into a center + radius for the nearby query).
+function metersBetween(a, b) {
+  const R = 6371000;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const la1 = a.lat * Math.PI / 180;
+  const la2 = b.lat * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Diff the marker set against `shops`, adding/removing/restyling in place.
+// Does not move the map, so it is safe to call from the idle handler.
+function renderMarkers(shops, selectedId, onSelect) {
+  if (!mapInstance || !MarkerClass) return;
+  const wanted = new Set(shops.map(s => s.id));
+  for (const [id, rec] of markers) {
+    if (!wanted.has(id)) { rec.marker.map = null; markers.delete(id); }
+  }
+  for (const shop of shops) {
+    if (shop.lat == null || shop.lng == null) continue;
+    const selected = shop.id === selectedId;
+    let rec = markers.get(shop.id);
+    if (!rec) {
+      const el = pillContent(shop, selected);
+      const marker = new MarkerClass({
+        map: mapInstance,
+        position: { lat: shop.lat, lng: shop.lng },
+        content: el,
+        gmpClickable: true,
+      });
+      marker.addListener('gmp-click', () => onSelect && onSelect(shop.id));
+      rec = { marker, el };
+      markers.set(shop.id, rec);
+    } else {
+      const fresh = pillContent(shop, selected);
+      rec.el.replaceWith(fresh);
+      rec.el = fresh;
+      rec.marker.content = fresh;
+    }
+  }
+}
+
+// center: {lat,lng}; shops: decorated list; selectedId; onSelect(id); onIdle(center,radius)
+export async function mountMap({ center, shops, selectedId, onSelect, onIdle }) {
   const canvas = document.getElementById('mc-map-canvas');
   if (!canvas) return;
 
@@ -63,6 +110,9 @@ export async function mountMap({ center, shops, selectedId, onSelect }) {
 
   const { Map } = await google.maps.importLibrary('maps');
   const { AdvancedMarkerElement } = await google.maps.importLibrary('marker');
+  MarkerClass = AdvancedMarkerElement;
+  // Keep the idle handler current; the listener (added once below) reads this.
+  idleCallback = onIdle || null;
 
   if (!mapInstance || mapInstance.__canvas !== canvas) {
     mapInstance = new Map(canvas, {
@@ -76,42 +126,43 @@ export async function mountMap({ center, shops, selectedId, onSelect }) {
     mapInstance.__canvas = canvas;
     markers = new Map();
     userMarker = null;
+
+    // Re-query shops for the visible region after the map settles (pan/zoom).
+    // Debounced so a flick of pans makes one Google call, not many. Updating
+    // markers via renderMarkers does not move the map, so there is no loop.
+    mapInstance.addListener('idle', () => {
+      if (!idleCallback) return;
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (!mapInstance || !idleCallback) return;
+        const b = mapInstance.getBounds();
+        if (!b) return;
+        const c = b.getCenter();
+        const ne = b.getNorthEast();
+        const ctr = { lat: c.lat(), lng: c.lng() };
+        const radius = metersBetween(ctr, { lat: ne.lat(), lng: ne.lng() });
+        idleCallback(ctr, radius);
+      }, 400);
+    });
   } else {
     mapInstance.setCenter(center);
   }
 
-  const wanted = new Set(shops.map(s => s.id));
-  for (const [id, rec] of markers) {
-    if (!wanted.has(id)) { rec.marker.map = null; markers.delete(id); }
-  }
   const bounds = new google.maps.LatLngBounds();
   bounds.extend(center);
-
   for (const shop of shops) {
-    if (shop.lat == null || shop.lng == null) continue;
-    bounds.extend({ lat: shop.lat, lng: shop.lng });
-    const selected = shop.id === selectedId;
-    let rec = markers.get(shop.id);
-    if (!rec) {
-      const el = pillContent(shop, selected);
-      const marker = new AdvancedMarkerElement({
-        map: mapInstance,
-        position: { lat: shop.lat, lng: shop.lng },
-        content: el,
-        gmpClickable: true,
-      });
-      marker.addListener('gmp-click', () => onSelect && onSelect(shop.id));
-      rec = { marker, el };
-      markers.set(shop.id, rec);
-    } else {
-      const fresh = pillContent(shop, selected);
-      rec.el.replaceWith(fresh);
-      rec.el = fresh;
-      rec.marker.content = fresh;
-    }
+    if (shop.lat != null && shop.lng != null) bounds.extend({ lat: shop.lat, lng: shop.lng });
   }
 
+  renderMarkers(shops, selectedId, onSelect);
+
   if (shops.length) mapInstance.fitBounds(bounds, 64);
+}
+
+// Update only the pins (and selection) for the current map, without moving it.
+// Called by the controller after a viewport re-query.
+export function updateShops({ shops, selectedId, onSelect }) {
+  renderMarkers(shops || [], selectedId, onSelect);
 }
 
 // Pan to the user and show a small blue dot, like map apps.

@@ -1,8 +1,8 @@
 import * as R from './render.js';
 import { decorate, sortList } from './model.js';
 import { getPosition } from './geo.js';
-import { fetchNearby, fetchSearch, fetchDetails } from './api.js';
-import { mountMap, highlight, openDirections, panToUser } from './map.js';
+import { fetchNearby, fetchNearbyInBounds, fetchSearch, fetchDetails } from './api.js';
+import { mountMap, updateShops, highlight, openDirections, panToUser } from './map.js';
 import { load, save } from './storage.js';
 import { DEFAULTS } from './config.js';
 
@@ -19,13 +19,17 @@ const state = {
   favs: persisted.favs,            // array of place_id
   userCoords: null,                // {lat,lng} | null
   selected: null,                  // place_id for map
+  detailId: null,                  // place_id for the open detail view
   nearby: { status: 'idle', raw: [], error: '' },
   results: { status: 'idle', raw: [], error: '' },
   saved: { status: 'idle', raw: [], error: '' },
+  detail: { status: 'idle', raw: null, error: '' },
 };
 
 let searchToken = 0;
 let savedToken = 0;
+let detailToken = 0;
+let nearbyToken = 0;
 let searchTimer = null;
 
 function persist() {
@@ -37,13 +41,16 @@ function view() {
   const coords = state.userCoords;
   const dec = (s) => decorate(s, state.favs, coords);
   const nearbyShops = sortList(state.nearby.raw.map(dec), state.sort);
-  const resultShops = sortList(state.results.raw.map(dec), 'rating');
+  // Search results are ordered by most-reviewed shops in the searched area.
+  const resultShops = sortList(state.results.raw.map(dec), 'popular');
   const savedShops = state.saved.raw.map(dec);
+  const detailShop = state.detail.raw ? dec(state.detail.raw) : null;
   return {
     ...state,
     nearby: { ...state.nearby, shops: nearbyShops },
     results: { ...state.results, shops: resultShops },
     saved: { ...state.saved, shops: savedShops },
+    detail: { ...state.detail, shop: detailShop },
   };
 }
 
@@ -62,15 +69,18 @@ function render() {
   }
   const screenHtml = {
     home: R.home, search: R.search, map: R.map, favorites: R.favorites, profile: R.profile,
+    detail: R.detail,
   }[v.screen](v);
 
+  // Detail is a sub-screen of Search; keep Search lit in the bottom nav.
+  const navScreen = v.screen === 'detail' ? 'search' : v.screen;
   root.innerHTML = `
     <div style="position:absolute; inset:0; display:flex; flex-direction:column;">
       ${R.statusBar()}
       <div class="mc-scroll" style="flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; position:relative;">
         ${screenHtml}
       </div>
-      ${R.bottomNav(v.screen)}
+      ${R.bottomNav(navScreen)}
     </div>`;
 
   afterRender(v);
@@ -91,6 +101,7 @@ function afterRender(v) {
       shops: v.nearby.shops,
       selectedId: v.selected,
       onSelect: selectPin,
+      onIdle: handleMapIdle,
     });
   }
 }
@@ -109,6 +120,36 @@ async function loadNearby() {
     state.nearby = { status: 'error', raw: [], error: friendly(e) };
   }
   render();
+}
+
+// Re-query shops for the map's current visible region. Called (debounced) from
+// map.js whenever the map settles after a pan/zoom. Updates the pins and the
+// bottom card in place without remounting the map (which would refit/loop).
+async function loadNearbyInBounds(center, radius) {
+  if (state.screen !== 'map') return;
+  const token = ++nearbyToken;
+  try {
+    const data = await fetchNearbyInBounds(center.lat, center.lng, radius);
+    if (token !== nearbyToken || state.screen !== 'map') return;
+    const raw = data.shops || [];
+    state.nearby = { status: 'ready', raw, error: '' };
+    const ids = new Set(raw.map(s => s.id));
+    if (!state.selected || !ids.has(state.selected)) {
+      state.selected = raw.length ? raw[0].id : null;
+    }
+    const v = view();
+    const card = document.getElementById('mc-map-card');
+    if (card) card.innerHTML = R.mapCard(v);
+    updateShops({ shops: v.nearby.shops, selectedId: v.selected, onSelect: selectPin });
+  } catch (e) {
+    // Keep whatever is already shown; a transient viewport query failing
+    // should not blank the map.
+  }
+}
+
+function handleMapIdle(center, radius) {
+  if (state.screen !== 'map') return;
+  loadNearbyInBounds(center, radius);
 }
 
 function onSearchInput(e) {
@@ -242,8 +283,40 @@ function setSort(sort) {
 
 function directions(id) {
   const v = view();
-  const shop = v.nearby.shops.find(s => s.id === id) || v.saved.shops.find(s => s.id === id);
+  const shop = v.nearby.shops.find(s => s.id === id)
+    || v.results.shops.find(s => s.id === id)
+    || v.saved.shops.find(s => s.id === id)
+    || (v.detail.shop && v.detail.shop.id === id ? v.detail.shop : null);
   openDirections(shop);
+}
+
+// ----- shop detail (opened from Search) -----
+async function openDetail(id) {
+  if (!id) return;
+  state.detailId = id;
+  state.detail = { status: 'loading', raw: null, error: '' };
+  state.screen = 'detail';
+  render();
+  const token = ++detailToken;
+  try {
+    const data = await fetchDetails(id);
+    if (token !== detailToken) return;
+    state.detail = { status: 'ready', raw: data.shop, error: '' };
+  } catch (e) {
+    if (token !== detailToken) return;
+    state.detail = { status: 'error', raw: null, error: friendly(e) };
+  }
+  if (state.screen === 'detail') render();
+}
+
+function closeDetail() {
+  state.screen = 'search';
+  state.detail = { status: 'idle', raw: null, error: '' };
+  render();
+}
+
+function retryDetail() {
+  if (state.detailId) openDetail(state.detailId);
 }
 
 async function mapLocateMe() {
@@ -294,9 +367,12 @@ root.addEventListener('click', (e) => {
     case 'directions': directions(id); break;
     case 'map-locate-me': mapLocateMe(); break;
     case 'clear-query': clearQuery(); break;
+    case 'open-detail': openDetail(id); break;
+    case 'close-detail': closeDetail(); break;
     case 'retry-nearby': loadNearby(); break;
     case 'retry-search': runSearch(); break;
     case 'retry-saved': loadSaved(); break;
+    case 'retry-detail': retryDetail(); break;
   }
 });
 

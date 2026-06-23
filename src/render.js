@@ -75,10 +75,11 @@ function bigRow(shop, rank) {
     </div>`;
 }
 
-// Smaller row (Search results).
+// Smaller row (Search results). Tapping the row opens the shop detail view;
+// the heart button keeps its own action (closest data-act wins on click).
 function smallRow(shop) {
   return `
-    <div style="display:flex; gap:14px; align-items:center; padding:18px 0; border-bottom:1px solid #ECE3D7;">
+    <div data-act="open-detail" data-id="${esc(shop.id)}" style="display:flex; gap:14px; align-items:center; padding:18px 0; border-bottom:1px solid #ECE3D7; cursor:pointer;">
       <div style="width:60px; height:60px; flex:0 0 auto; border-radius:14px; background:${shop.tone}; position:relative; overflow:hidden;">
         <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
       </div>
@@ -218,6 +219,95 @@ function browseAreas() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
         </button>`).join('')}
       <div style="font-size:12.5px; color:#A98C6B; margin-top:18px; line-height:1.5;">Type a shop or neighborhood above to search.</div>
+    </div>`;
+}
+
+// ===================== SHOP DETAIL =====================
+// Opened from a Search result. Shows a description plus key info and reuses
+// the directions + heart affordances. Back returns to Search.
+function backBar() {
+  return `
+    <button data-act="close-detail" style="display:flex; align-items:center; gap:8px; background:none; border:none; cursor:pointer; padding:6px 0 14px; color:#6F5942; font-size:13px; font-weight:600;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>
+      <span style="color:#2E2017;">Search</span>
+    </button>`;
+}
+
+// Compose a description. Prefer Google's editorialSummary when present;
+// otherwise build a sensible sentence from the data we already have. We never
+// fabricate reviews or invent facts here.
+function buildDescription(shop) {
+  if (shop.editorial) return esc(shop.editorial);
+  const bits = [];
+  const kind = (shop.specialty || 'Coffee').toLowerCase();
+  let lead = `A ${kind} spot`;
+  if (shop.hood) lead += ` in ${esc(shop.hood)}`;
+  lead += '.';
+  bits.push(lead);
+  if (shop.rating != null) {
+    bits.push(`Rated ${esc(shop.ratingStr)} across ${esc(shop.reviewsStr)} ratings.`);
+  }
+  if (shop.openLabel) bits.push(`${shop.openLabel === 'Open' ? 'Open right now' : 'Currently closed'}.`);
+  return bits.join(' ');
+}
+
+function detailCard(shop) {
+  const eyebrow = shop.hood
+    ? `${esc(shop.specialty)} · ${esc(shop.hood)}`
+    : `${esc(shop.specialty)}`;
+  const address = shop.address
+    ? `<div style="display:flex; gap:10px; align-items:flex-start; margin-top:18px;">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.7" style="flex:0 0 auto; margin-top:2px;"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+         <div style="font-size:13.5px; color:#6F5942; line-height:1.5;">${esc(shop.address)}</div>
+       </div>` : '';
+  const phone = shop.phone
+    ? `<div style="display:flex; gap:10px; align-items:center; margin-top:12px;">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.7" style="flex:0 0 auto;"><path d="M5 4h4l2 5-3 2a12 12 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>
+         <a href="tel:${esc(shop.phone)}" style="font-size:13.5px; color:#6F5942; text-decoration:none;">${esc(shop.phone)}</a>
+       </div>` : '';
+  const website = shop.website
+    ? `<div style="display:flex; gap:10px; align-items:center; margin-top:12px;">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.7" style="flex:0 0 auto;"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+         <a href="${esc(shop.website)}" target="_blank" rel="noopener" style="font-size:13.5px; color:#6F5942; text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Visit website</a>
+       </div>` : '';
+  const hours = (shop.hours && shop.hours.length)
+    ? `<div style="margin-top:22px;">
+         <div style="font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:8px;">Hours</div>
+         ${shop.hours.map(h => `<div style="font-size:13px; color:#6F5942; line-height:1.7;">${esc(h)}</div>`).join('')}
+       </div>` : '';
+
+  return `
+    <div style="position:relative; width:100%; height:180px; border-radius:22px; background:${shop.tone}; overflow:hidden; margin-bottom:18px;">
+      <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
+      <div style="position:absolute; bottom:0; left:0; right:0; height:50%; background:linear-gradient(transparent, rgba(34,23,16,0.45));"></div>
+      <button data-act="toggle-fav" data-id="${esc(shop.id)}" style="position:absolute; top:14px; right:14px; background:rgba(246,240,232,0.92); border:none; cursor:pointer; padding:9px; border-radius:50%; display:flex; box-shadow:0 6px 16px -6px rgba(46,32,23,0.5);">
+        ${heartSvg(20, shop.heartFill, shop.heartStroke)}
+      </button>
+    </div>
+    <div style="font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:#A98C6B; font-weight:600; margin-bottom:6px;">${eyebrow}</div>
+    <div style="font-family:'Libre Caslon Display',serif; font-size:32px; line-height:1.02; color:#2E2017; margin-bottom:12px;">${esc(shop.name)}</div>
+    ${metaLine(shop, true)}
+    <div style="font-size:14.5px; color:#4A3A2C; line-height:1.6; margin-top:18px;">${buildDescription(shop)}</div>
+    ${address}
+    ${phone}
+    ${website}
+    ${hours}
+    <button data-act="directions" data-id="${esc(shop.id)}" style="margin-top:24px; width:100%; border:none; background:#2E2017; color:#F6F0E8; font-weight:600; font-size:15px; padding:15px; border-radius:14px; cursor:pointer;">Directions${shop.distStr ? ' · ' + esc(shop.distStr) : ''}</button>
+    ${attribution()}`;
+}
+
+export function detail(state) {
+  const d = state.detail || {};
+  let body;
+  if (d.status === 'loading' || d.status === 'idle') body = loadingBlock('Loading shop…');
+  else if (d.status === 'error') body = errorBlock(d.error || 'Could not load this shop.', 'retry-detail');
+  else if (!d.shop) body = errorBlock('This shop could not be found.', 'retry-detail');
+  else body = detailCard(d.shop);
+
+  return `
+    <div style="padding:8px 24px 120px;">
+      ${backBar()}
+      ${body}
     </div>`;
 }
 

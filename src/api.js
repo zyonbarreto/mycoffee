@@ -10,9 +10,26 @@ const FIELDS = [
   'types', 'priceLevel', 'regularOpeningHours',
 ];
 
+// Detail view asks for a few extra fields. These are only requested when a
+// single place is opened, never for list views (keeps list calls lean).
+const DETAIL_FIELDS = FIELDS.concat([
+  'editorialSummary', 'formattedAddress', 'websiteURI', 'nationalPhoneNumber',
+]);
+
 async function places() {
   const google = await loadSdk();
   return google.maps.importLibrary('places');
+}
+
+// editorialSummary may come back as a plain string or as an object with an
+// overview/text property depending on the SDK build. Read it defensively.
+function editorialText(p) {
+  try {
+    const e = p.editorialSummary;
+    if (!e) return null;
+    if (typeof e === 'string') return e;
+    return e.overview || e.text || null;
+  } catch (e) { return null; }
 }
 
 async function mapPlace(p) {
@@ -23,6 +40,12 @@ async function mapPlace(p) {
       if (typeof r === 'boolean') open = r;
     }
   } catch (e) { /* hours not available -> leave null */ }
+  let hours = null;
+  try {
+    if (p.regularOpeningHours && Array.isArray(p.regularOpeningHours.weekdayDescriptions)) {
+      hours = p.regularOpeningHours.weekdayDescriptions;
+    }
+  } catch (e) { /* no hours -> leave null */ }
   return {
     id: p.id,
     name: p.displayName || '',
@@ -34,6 +57,12 @@ async function mapPlace(p) {
     types: p.types || [],
     priceLevel: p.priceLevel != null ? p.priceLevel : null,
     photoName: null,
+    // Detail-only fields. Null on list results (not requested there).
+    editorial: editorialText(p),
+    address: p.formattedAddress || null,
+    website: p.websiteURI || null,
+    phone: p.nationalPhoneNumber || null,
+    hours,
   };
 }
 
@@ -42,6 +71,23 @@ export async function fetchNearby(lat, lng) {
   const { places: results } = await Place.searchNearby({
     fields: FIELDS,
     locationRestriction: { center: { lat, lng }, radius: 2500 },
+    includedTypes: ['coffee_shop', 'cafe'],
+    maxResultCount: 20,
+    rankPreference: SearchNearbyRankPreference.POPULARITY,
+  });
+  const shops = await Promise.all((results || []).map(mapPlace));
+  return { shops };
+}
+
+// Same as fetchNearby but driven by the map's current visible region. The
+// caller passes the viewport center plus a radius derived from the map bounds.
+// Google caps locationRestriction radius at 50000m; clamp to be safe.
+export async function fetchNearbyInBounds(lat, lng, radius) {
+  const { Place, SearchNearbyRankPreference } = await places();
+  const r = Math.min(50000, Math.max(500, radius || 2500));
+  const { places: results } = await Place.searchNearby({
+    fields: FIELDS,
+    locationRestriction: { center: { lat, lng }, radius: r },
     includedTypes: ['coffee_shop', 'cafe'],
     maxResultCount: 20,
     rankPreference: SearchNearbyRankPreference.POPULARITY,
@@ -65,7 +111,7 @@ export async function fetchSearch(q, lat, lng) {
 export async function fetchDetails(id) {
   const { Place } = await places();
   const p = new Place({ id });
-  await p.fetchFields({ fields: FIELDS });
+  await p.fetchFields({ fields: DETAIL_FIELDS });
   return { shop: await mapPlace(p) };
 }
 
