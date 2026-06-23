@@ -386,5 +386,13 @@ function friendly(e) {
 }
 
 // ----- boot -----
+// userCoords is never persisted, so an already-onboarded user always boots
+// without coordinates. Auto-request location once (the browser shows its
+// native prompt only if undecided; if previously denied it fails quietly and
+// useLocation() leaves a manual "Use my location" CTA on the Discover screen).
+// This runs a single time on boot, so it cannot loop.
 render();
-if (state.onboarded) loadNearby();
+if (state.onboarded) {
+  if (state.userCoords) loadNearby();
+  else useLocation();
+}

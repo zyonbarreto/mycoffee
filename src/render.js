@@ -104,9 +104,9 @@ function loadingBlock(label) {
     </div>`;
 }
 
-function errorBlock(message, retryAct) {
+function errorBlock(message, retryAct, retryLabel) {
   const retry = retryAct
-    ? `<button data-act="${retryAct}" style="margin-top:14px; border:1px solid #E0CFB8; background:none; color:#8A6A4C; font-weight:600; font-size:13px; padding:11px 20px; border-radius:12px; cursor:pointer;">Try again</button>` : '';
+    ? `<button data-act="${retryAct}" style="margin-top:14px; border:1px solid #E0CFB8; background:none; color:#8A6A4C; font-weight:600; font-size:13px; padding:11px 20px; border-radius:12px; cursor:pointer;">${esc(retryLabel || 'Try again')}</button>` : '';
   return `
     <div style="padding:50px 0; text-align:center; color:#93795D;">
       <div style="font-family:'Libre Caslon Display',serif; font-size:22px; color:#2E2017; margin-bottom:8px;">Hmm.</div>
@@ -147,10 +147,11 @@ export function home(state) {
     <div style="padding:8px 24px 120px;">
       <div style="font-size:11px; letter-spacing:0.3em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:10px;">Good coffee, now</div>
       <div style="font-family:'Libre Caslon Display',serif; font-size:46px; line-height:0.95; color:#2E2017;">Discover</div>
-      <div style="display:flex; align-items:center; gap:6px; color:#6F5942; font-size:13px; margin-top:14px; white-space:nowrap;">
+      <button data-act="use-location" aria-label="Use my location" style="display:flex; align-items:center; gap:6px; color:#6F5942; font-size:13px; margin-top:14px; white-space:nowrap; background:none; border:none; padding:0; cursor:pointer;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
         <span style="font-weight:600; color:#2E2017;">${esc(state.location)}</span>
-      </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
       <div style="display:flex; align-items:center; gap:10px; background:#FFFCF7; border:1px solid #E0D2BF; border-radius:15px; padding:13px 15px; margin-top:18px;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input id="mc-search-input" class="mc-in" value="${esc(state.query)}" placeholder="Shops, neighborhoods, cities…" style="flex:1; border:none; outline:none; background:none; font-size:15px; color:#2E2017; min-width:0;" />
@@ -195,7 +196,14 @@ function discoverList(state) {
   let body;
   const nb = state.nearby;
   if (nb.status === 'loading' || nb.status === 'idle') body = loadingBlock();
-  else if (nb.status === 'error') body = errorBlock(nb.error || 'Could not load nearby shops.', 'retry-nearby');
+  else if (nb.status === 'error') {
+    // When we have no coordinates yet, the only path forward is to (re)request
+    // location, so the CTA triggers geolocation rather than re-running the
+    // failing nearby query.
+    body = state.userCoords
+      ? errorBlock(nb.error || 'Could not load nearby shops.', 'retry-nearby')
+      : errorBlock(nb.error || 'Location not set. Search a place instead.', 'use-location', 'Use my location');
+  }
   else if (!nb.shops.length) body = errorBlock('No coffee shops found near here. Try searching a different area.', 'retry-nearby');
   else body = nb.shops.map((s, i) => bigRow(s, String(i + 1).padStart(2, '0'))).join('') + attribution();
 
