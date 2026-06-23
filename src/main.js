@@ -2,7 +2,7 @@ import * as R from './render.js';
 import { decorate, sortList } from './model.js';
 import { getPosition } from './geo.js';
 import { fetchNearby, fetchNearbyInBounds, fetchSearch, fetchDetails } from './api.js';
-import { mountMap, updateShops, highlight, openDirections, panToUser, getViewport, markSearched } from './map.js';
+import { mountMap, updateShops, highlight, openDirections, panToUser, getViewportWithRetry, markSearched } from './map.js';
 import { load, save } from './storage.js';
 import { DEFAULTS } from './config.js';
 
@@ -161,10 +161,13 @@ function handleViewportChange(moved) {
 // pins + bottom card in place, then re-baseline so the button hides again.
 async function searchThisArea() {
   if (state.screen !== 'map') return;
-  const vp = getViewport();
-  if (!vp) return;
   const btn = document.getElementById('mc-search-area');
   if (btn) btn.style.display = 'none';
+  const vp = await getViewportWithRetry();
+  if (!vp) {
+    if (btn) btn.style.display = 'flex';
+    return;
+  }
   await loadNearbyInBounds(vp.center, vp.radius);
   markSearched(vp);
 }
