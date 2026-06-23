@@ -49,14 +49,16 @@ function metaLine(shop, withOpen) {
     </div>`;
 }
 
-// Big row (Discover + Saved). rank is a 2-char string or null.
+// Big row (Discover + Saved). rank is a 2-char string or null. Tapping the row
+// opens the shop detail view; the heart button keeps its own action (closest
+// data-act wins on click).
 function bigRow(shop, rank) {
   const badge = rank ? `<div style="position:absolute; top:-8px; left:-8px; font-family:'Libre Caslon Display',serif; font-size:13px; color:#fff; background:#2E2017; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${esc(rank)}</div>` : '';
   const eyebrow = shop.hood
     ? `${esc(shop.specialty)} · ${esc(shop.hood)}`
     : `${esc(shop.specialty)}`;
   return `
-    <div style="display:flex; gap:16px; align-items:center; padding:20px 0; border-bottom:1px solid #ECE3D7;">
+    <div data-act="open-detail" data-id="${esc(shop.id)}" style="display:flex; gap:16px; align-items:center; padding:20px 0; border-bottom:1px solid #ECE3D7; cursor:pointer;">
       <div style="position:relative; flex:0 0 auto;">
         <div style="width:76px; height:76px; border-radius:16px; background:${shop.tone}; overflow:hidden; position:relative;">
           <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
@@ -135,41 +137,21 @@ export function onboarding() {
     </div>`;
 }
 
-// ===================== HOME / DISCOVER =====================
+// ===================== HOME / DISCOVER (+ SEARCH) =====================
+// Discover and Search live in one tab. The search input sits at the top and is
+// always available. With an empty query the screen shows the ranked nearby
+// Discover list with its sort tabs; once the user types, the same body region
+// swaps to search results. Clearing the query returns to the Discover list.
 export function home(state) {
-  const tabs = [['rating', 'Top rated'], ['popular', 'Popular'], ['distance', 'Closest']]
-    .map(([k, label]) => {
-      const on = state.sort === k;
-      return `<button data-act="set-sort" data-sort="${k}" style="background:none; border:none; cursor:pointer; font-size:13px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:0 0 12px; color:${on ? '#2E2017' : '#B9A78F'}; border-bottom:2px solid ${on ? '#2E2017' : 'transparent'}; white-space:nowrap; flex:0 0 auto;">${label}</button>`;
-    }).join('');
-
-  let body;
-  const nb = state.nearby;
-  if (nb.status === 'loading' || nb.status === 'idle') body = loadingBlock();
-  else if (nb.status === 'error') body = errorBlock(nb.error || 'Could not load nearby shops.', 'retry-nearby');
-  else if (!nb.shops.length) body = errorBlock('No coffee shops found near here. Try searching a different area.', 'retry-nearby');
-  else body = nb.shops.map((s, i) => bigRow(s, String(i + 1).padStart(2, '0'))).join('') + attribution();
-
   return `
     <div style="padding:8px 24px 120px;">
       <div style="font-size:11px; letter-spacing:0.3em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:10px;">Good coffee, now</div>
       <div style="font-family:'Libre Caslon Display',serif; font-size:46px; line-height:0.95; color:#2E2017;">Discover</div>
-      <button data-act="go-search" style="display:flex; align-items:center; gap:6px; color:#6F5942; font-size:13px; margin-top:14px; background:none; border:none; padding:0; cursor:pointer; white-space:nowrap;">
+      <div style="display:flex; align-items:center; gap:6px; color:#6F5942; font-size:13px; margin-top:14px; white-space:nowrap;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.8"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
         <span style="font-weight:600; color:#2E2017;">${esc(state.location)}</span>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-      </button>
-      <div style="display:flex; align-items:center; gap:22px; margin:26px 0 6px; border-bottom:1px solid #E4D9CB;">${tabs}</div>
-      ${body}
-    </div>`;
-}
-
-// ===================== SEARCH =====================
-export function search(state) {
-  return `
-    <div style="padding:8px 24px 120px;">
-      <div style="font-family:'Libre Caslon Display',serif; font-size:40px; line-height:0.95; color:#2E2017; margin-bottom:18px;">Search</div>
-      <div style="display:flex; align-items:center; gap:10px; background:#FFFCF7; border:1px solid #E0D2BF; border-radius:15px; padding:13px 15px;">
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; background:#FFFCF7; border:1px solid #E0D2BF; border-radius:15px; padding:13px 15px; margin-top:18px;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7B5C" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input id="mc-search-input" class="mc-in" value="${esc(state.query)}" placeholder="Shops, neighborhoods, cities…" style="flex:1; border:none; outline:none; background:none; font-size:15px; color:#2E2017; min-width:0;" />
         <button id="mc-clear" data-act="clear-query" style="background:none; border:none; cursor:pointer; padding:0; color:#B09877; display:${state.query ? 'flex' : 'none'};"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
@@ -178,10 +160,12 @@ export function search(state) {
     </div>`;
 }
 
-// Rendered standalone too, for live updates without losing input focus.
+// Body of the combined Discover/Search tab. Rendered standalone too, for live
+// updates without losing input focus. Empty query => Discover browse list with
+// sort tabs; non-empty query => search results (ordered by reviews upstream).
 export function searchBody(state) {
   const q = (state.query || '').trim();
-  if (!q) return browseAreas();
+  if (!q) return discoverList(state);
 
   const r = state.results;
   if (r.status === 'loading' || r.status === 'idle') return loadingBlock('Searching…');
@@ -200,36 +184,34 @@ export function searchBody(state) {
     ${attribution()}`;
 }
 
-// Static "browse by area" affordance. With live data there are no fixed
-// neighborhoods, so this offers location actions instead.
-function browseAreas() {
-  const rows = [
-    { act: 'use-location', icon: '◎', name: 'Near me', sub: 'Use my current location' },
-  ];
+// The Discover browse experience: sort tabs plus the ranked nearby list.
+function discoverList(state) {
+  const tabs = [['rating', 'Top rated'], ['popular', 'Popular'], ['distance', 'Closest']]
+    .map(([k, label]) => {
+      const on = state.sort === k;
+      return `<button data-act="set-sort" data-sort="${k}" style="background:none; border:none; cursor:pointer; font-size:13px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:0 0 12px; color:${on ? '#2E2017' : '#B9A78F'}; border-bottom:2px solid ${on ? '#2E2017' : 'transparent'}; white-space:nowrap; flex:0 0 auto;">${label}</button>`;
+    }).join('');
+
+  let body;
+  const nb = state.nearby;
+  if (nb.status === 'loading' || nb.status === 'idle') body = loadingBlock();
+  else if (nb.status === 'error') body = errorBlock(nb.error || 'Could not load nearby shops.', 'retry-nearby');
+  else if (!nb.shops.length) body = errorBlock('No coffee shops found near here. Try searching a different area.', 'retry-nearby');
+  else body = nb.shops.map((s, i) => bigRow(s, String(i + 1).padStart(2, '0'))).join('') + attribution();
+
   return `
-    <div>
-      <div style="font-size:11px; letter-spacing:0.24em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin:30px 0 6px;">Browse</div>
-      ${rows.map(a => `
-        <button data-act="${a.act}" style="width:100%; display:flex; align-items:center; gap:14px; padding:17px 0; border:none; border-bottom:1px solid #ECE3D7; background:none; cursor:pointer; text-align:left;">
-          <div style="width:42px; height:42px; flex:0 0 auto; border-radius:12px; background:#EBE0CF; display:flex; align-items:center; justify-content:center; color:#8A6A4C;">${a.icon}</div>
-          <div style="flex:1; min-width:0;">
-            <div style="font-size:16px; color:#2E2017; font-weight:600;">${a.name}</div>
-            <div style="font-size:12.5px; color:#93795D; margin-top:2px;">${a.sub}</div>
-          </div>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2AC8E" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
-        </button>`).join('')}
-      <div style="font-size:12.5px; color:#A98C6B; margin-top:18px; line-height:1.5;">Type a shop or neighborhood above to search.</div>
-    </div>`;
+    <div style="display:flex; align-items:center; gap:22px; margin:26px 0 6px; border-bottom:1px solid #E4D9CB;">${tabs}</div>
+    ${body}`;
 }
 
 // ===================== SHOP DETAIL =====================
-// Opened from a Search result. Shows a description plus key info and reuses
-// the directions + heart affordances. Back returns to Search.
+// Opened from the combined Discover/Search list. Shows a description plus key
+// info and reuses the directions + heart affordances. Back returns to Discover.
 function backBar() {
   return `
     <button data-act="close-detail" style="display:flex; align-items:center; gap:8px; background:none; border:none; cursor:pointer; padding:6px 0 14px; color:#6F5942; font-size:13px; font-weight:600;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>
-      <span style="color:#2E2017;">Search</span>
+      <span style="color:#2E2017;">Discover</span>
     </button>`;
 }
 
@@ -436,8 +418,7 @@ export function bottomNav(screen) {
     </button>`;
   return `
     <div style="flex:0 0 auto; height:86px; background:rgba(246,240,232,0.94); backdrop-filter:blur(12px); border-top:1px solid #E4D9CB; display:flex; align-items:flex-start; padding:12px 6px 0;">
-      ${tab('go-home', 'home', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('home')}" stroke-width="1.7"><path d="M4 10.5 12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/></svg>`)}
-      ${tab('go-search', 'search', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('search')}" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`)}
+      ${tab('go-home', 'home', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('home')}" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`)}
       ${tab('go-map', 'map', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('map')}" stroke-width="1.7"><path d="M9 4 3 6.5v13.5L9 17.5l6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>`)}
       ${tab('go-fav', 'favorites', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('favorites')}" stroke-width="1.7"><path d="M12 20s-7-4.6-7-9.7A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7 3.3C19 15.4 12 20 12 20z"/></svg>`)}
       ${tab('go-profile', 'profile', `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c('profile')}" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>`)}
@@ -445,5 +426,5 @@ export function bottomNav(screen) {
 }
 
 function labelFor(name) {
-  return { home: 'Discover', search: 'Search', map: 'Map', favorites: 'Saved', profile: 'Profile' }[name];
+  return { home: 'Discover', map: 'Map', favorites: 'Saved', profile: 'Profile' }[name];
 }

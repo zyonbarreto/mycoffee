@@ -68,12 +68,13 @@ function render() {
     return;
   }
   const screenHtml = {
-    home: R.home, search: R.search, map: R.map, favorites: R.favorites, profile: R.profile,
+    home: R.home, map: R.map, favorites: R.favorites, profile: R.profile,
     detail: R.detail,
   }[v.screen](v);
 
-  // Detail is a sub-screen of Search; keep Search lit in the bottom nav.
-  const navScreen = v.screen === 'detail' ? 'search' : v.screen;
+  // Detail is a sub-screen of the combined Discover/Search tab; keep Discover
+  // lit in the bottom nav.
+  const navScreen = v.screen === 'detail' ? 'home' : v.screen;
   root.innerHTML = `
     <div style="position:absolute; inset:0; display:flex; flex-direction:column;">
       ${R.statusBar()}
@@ -87,7 +88,7 @@ function render() {
 }
 
 function afterRender(v) {
-  if (v.screen === 'search') {
+  if (v.screen === 'home') {
     const input = document.getElementById('mc-search-input');
     if (input) {
       input.addEventListener('input', onSearchInput);
@@ -184,7 +185,7 @@ async function runSearch() {
     state.results = { status: 'error', raw: [], error: friendly(e) };
   }
   const body = document.getElementById('mc-search-body');
-  if (body && state.screen === 'search') body.innerHTML = R.searchBody(view());
+  if (body && state.screen === 'home') body.innerHTML = R.searchBody(view());
 }
 
 async function loadSaved() {
@@ -310,7 +311,7 @@ async function openDetail(id) {
 }
 
 function closeDetail() {
-  state.screen = 'search';
+  state.screen = 'home';
   state.detail = { status: 'idle', raw: null, error: '' };
   render();
 }
@@ -357,7 +358,7 @@ root.addEventListener('click', (e) => {
     case 'use-location': useLocation(); break;
     case 'maybe-later': maybeLater(); break;
     case 'go-home': go('home'); break;
-    case 'go-search': go('search'); break;
+    case 'go-search': go('home'); break;
     case 'go-map': go('map'); break;
     case 'go-fav': go('favorites'); break;
     case 'go-profile': go('profile'); break;
