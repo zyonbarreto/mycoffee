@@ -93,23 +93,6 @@ export async function fetchNearby(lat, lng) {
   return { shops };
 }
 
-// Same as fetchNearby but driven by the map's current visible region. The
-// caller passes the viewport center plus a radius derived from the map bounds.
-// Google caps locationRestriction radius at 50000m; clamp to be safe.
-export async function fetchNearbyInBounds(lat, lng, radius) {
-  const { Place, SearchNearbyRankPreference } = await places();
-  const r = Math.min(50000, Math.max(500, radius || 2500));
-  const { places: results } = await Place.searchNearby({
-    fields: FIELDS,
-    locationRestriction: { center: { lat, lng }, radius: r },
-    includedTypes: ['coffee_shop', 'cafe'],
-    maxResultCount: 20,
-    rankPreference: SearchNearbyRankPreference.POPULARITY,
-  });
-  const shops = await Promise.all((results || []).map(mapPlace));
-  return { shops };
-}
-
 export async function fetchSearch(q, lat, lng) {
   const query = q.toLowerCase().includes('coffee') ? q : q + ' coffee';
   const { Place } = await places();

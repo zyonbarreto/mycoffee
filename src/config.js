@@ -1,9 +1,9 @@
-// One Google key does everything in this build: the map tiles AND the
-// nearby/search lookups (Places runs in the browser, no proxy server).
+// One Google key loads the Places library for nearby/search/details in the
+// browser (no proxy server).
 //
 // Set it in .env.local as VITE_MAPS_BROWSER_KEY (see .env.example).
 // Lock the key to your website (HTTP referrer) so only your app can use it,
-// and enable two APIs on it: "Maps JavaScript API" and "Places API (New)".
+// and enable "Places API (New)" on it.
 
 export const MAPS_BROWSER_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY || '';
 

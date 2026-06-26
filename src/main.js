@@ -2,7 +2,7 @@ import * as R from './render.js';
 import { decorate, sortList } from './model.js';
 import { getPosition } from './geo.js';
 import { fetchNearby, fetchSearch, fetchDetails } from './api.js';
-import { mountMap, updateShops, highlight, openDirections, panToUser } from './map.js';
+import { openDirections } from './map.js';
 import { load, save } from './storage.js';
 import { DEFAULTS } from './config.js';
 
@@ -13,13 +13,11 @@ const persisted = load();
 const state = {
   screen: persisted.onboarded ? 'home' : 'onboarding',
   onboarded: persisted.onboarded,
-  discoverView: 'list',            // 'list' | 'map' on the Discover tab
   sort: 'rating',
   query: '',
   location: persisted.location,
   favs: persisted.favs,            // array of place_id
   userCoords: null,                // {lat,lng} | null
-  selected: null,                  // place_id for map pin selection
   detailId: null,                  // place_id for the open detail view
   nearby: { status: 'idle', raw: [], error: '' },
   results: { status: 'idle', raw: [], error: '' },
@@ -34,10 +32,6 @@ let searchTimer = null;
 
 function persist() {
   save({ onboarded: state.onboarded, favs: state.favs, location: state.location });
-}
-
-function isDiscoverMap() {
-  return state.screen === 'home' && state.discoverView === 'map' && !state.query.trim();
 }
 
 // ----- build a decorated "view" of state for the renderers -----
@@ -56,12 +50,6 @@ function view() {
     saved: { ...state.saved, shops: savedShops },
     detail: { ...state.detail, shop: detailShop },
   };
-}
-
-function shopsById(vstate) {
-  const m = {};
-  vstate.nearby.shops.forEach(s => { m[s.id] = s; });
-  return m;
 }
 
 // ----- render -----
@@ -92,21 +80,13 @@ function render() {
 }
 
 function afterRender(v) {
-  if (v.screen === 'home' && v.discoverView === 'list') {
+  if (v.screen === 'home') {
     const input = document.getElementById('mc-search-input');
     if (input) {
       input.addEventListener('input', onSearchInput);
       // keep caret at end when re-rendered with a value
       const val = input.value; input.value = ''; input.value = val;
     }
-  }
-  if (isDiscoverMap()) {
-    mountMap({
-      center: v.userCoords || DEFAULTS.fallback,
-      shops: v.nearby.shops,
-      selectedId: v.selected,
-      onSelect: selectPin,
-    });
   }
   if (v.screen === 'detail') setupDetailSwipe();
 }
@@ -167,7 +147,6 @@ async function loadNearby() {
     const data = await fetchNearby(state.userCoords.lat, state.userCoords.lng);
     const raw = data.shops || [];
     state.nearby = { status: 'ready', raw, error: '' };
-    if (!state.selected && raw.length) state.selected = raw[0].id;
   } catch (e) {
     state.nearby = { status: 'error', raw: [], error: friendly(e) };
   }
@@ -179,7 +158,6 @@ function onSearchInput(e) {
   const clear = document.getElementById('mc-clear');
   if (clear) clear.style.display = state.query ? 'flex' : 'none';
   const q = state.query.trim();
-  if (q) state.discoverView = 'list';
   // live update only the body region (keeps input focus)
   const body = document.getElementById('mc-search-body');
   if (!q) {
@@ -233,24 +211,15 @@ async function loadSaved() {
 // ----- interactions -----
 function go(screen) {
   state.screen = screen;
-  if (screen !== 'home') state.discoverView = 'list';
   render();
   if (screen === 'home' && state.nearby.status === 'idle') loadNearby();
   if (screen === 'favorites') loadSaved();
-}
-
-function setDiscoverView(view) {
-  if (view !== 'list' && view !== 'map') return;
-  state.discoverView = view;
-  render();
-  if (view === 'map' && state.nearby.status === 'idle') loadNearby();
 }
 
 async function useLocation() {
   state.onboarded = true;
   persist();
   state.screen = 'home';
-  state.discoverView = 'list';
   state.nearby = { status: 'loading', raw: [], error: '' };
   render();
   try {
@@ -274,7 +243,6 @@ function maybeLater() {
   state.onboarded = true;
   persist();
   state.screen = 'home';
-  state.discoverView = 'list';
   state.nearby = { status: 'error', raw: [], error: 'Turn on location, or use Search to find shops.' };
   render();
 }
@@ -284,14 +252,6 @@ function toggleFav(id) {
   state.favs = has ? state.favs.filter(f => f !== id) : [...state.favs, id];
   persist();
 
-  if (isDiscoverMap()) {
-    // update only the card + marker styles, keep the map intact
-    const v = view();
-    const card = document.getElementById('mc-map-card');
-    if (card) card.innerHTML = R.mapCard(v);
-    highlight(id, shopsById(v));
-    return;
-  }
   if (state.screen === 'favorites') {
     // drop it from the saved list live (no need to refetch)
     state.saved.raw = state.saved.raw.filter(s => s.id !== id);
@@ -299,14 +259,6 @@ function toggleFav(id) {
     return;
   }
   render();
-}
-
-function selectPin(id) {
-  state.selected = id;
-  const v = view();
-  const card = document.getElementById('mc-map-card');
-  if (card) card.innerHTML = R.mapCard(v);
-  highlight(id, shopsById(v));
 }
 
 function setSort(sort) {
@@ -352,26 +304,6 @@ function retryDetail() {
   if (state.detailId) openDetail(state.detailId);
 }
 
-async function mapLocateMe() {
-  try {
-    const coords = await getPosition({ fresh: true });
-    state.userCoords = coords;
-    state.location = 'Near me';
-    persist();
-    const ok = await panToUser(coords);
-    if (!ok && isDiscoverMap()) render();
-  } catch (e) {
-    if (state.userCoords && isDiscoverMap()) {
-      await panToUser(state.userCoords);
-      return;
-    }
-    const msg = e.message === 'GEO_DENIED'
-      ? 'Location is off. Allow it in your browser settings.'
-      : 'Could not get your location right now.';
-    alert(msg);
-  }
-}
-
 function clearQuery() {
   state.query = '';
   state.results = { status: 'idle', raw: [], error: '' };
@@ -394,11 +326,8 @@ root.addEventListener('click', (e) => {
     case 'go-fav': go('favorites'); break;
     case 'go-profile': go('profile'); break;
     case 'set-sort': setSort(btn.getAttribute('data-sort')); break;
-    case 'set-discover-view': setDiscoverView(btn.getAttribute('data-view')); break;
     case 'toggle-fav': toggleFav(id); break;
-    case 'select-pin': selectPin(id); break;
     case 'directions': directions(id); break;
-    case 'map-locate-me': mapLocateMe(); break;
     case 'clear-query': clearQuery(); break;
     case 'open-detail': openDetail(id); break;
     case 'close-detail': closeDetail(); break;

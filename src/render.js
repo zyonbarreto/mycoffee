@@ -158,9 +158,6 @@ export function onboarding() {
 // Discover list with its sort tabs; once the user types, the same body region
 // swaps to search results. Clearing the query returns to the Discover list.
 export function home(state) {
-  const q = (state.query || '').trim();
-  if (!q && state.discoverView === 'map') return discoverMapView(state);
-
   return `
     <div style="padding:8px 20px 120px; overflow-x:hidden;">
       <div style="font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:#9A7B5C; font-weight:600; margin-bottom:8px;">Good coffee, now</div>
@@ -203,15 +200,6 @@ export function searchBody(state) {
     ${attribution()}`;
 }
 
-// List / Map toggle for the Discover browse view (hidden during search).
-function discoverViewToggle(active) {
-  const btn = (view, label) => {
-    const on = active === view;
-    return `<button data-act="set-discover-view" data-view="${view}" style="background:${on ? '#2E2017' : 'none'}; border:1px solid ${on ? '#2E2017' : '#E0D2BF'}; cursor:pointer; font-size:10px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:6px 10px; border-radius:9px; color:${on ? '#F6F0E8' : '#8A715A'}; white-space:nowrap;">${label}</button>`;
-  };
-  return `<div style="display:flex; gap:5px; flex:0 0 auto;">${btn('list', 'List')}${btn('map', 'Map')}</div>`;
-}
-
 // The Discover browse experience: sort tabs plus the ranked nearby list.
 function discoverList(state) {
   const tabs = [['rating', 'Top rated'], ['popular', 'Popular'], ['distance', 'Closest']]
@@ -235,10 +223,7 @@ function discoverList(state) {
   else body = nb.shops.map((s, i) => bigRow(s, String(i + 1).padStart(2, '0'))).join('') + attribution();
 
   return `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:22px 0 4px; border-bottom:1px solid #E4D9CB; min-width:0;">
-      <div style="display:flex; align-items:center; gap:14px; min-width:0; flex:1;">${tabs}</div>
-      ${discoverViewToggle('list')}
-    </div>
+    <div style="display:flex; align-items:center; gap:14px; margin:22px 0 4px; border-bottom:1px solid #E4D9CB; min-width:0;">${tabs}</div>
     ${body}`;
 }
 
@@ -329,67 +314,6 @@ export function detail(state) {
     <div id="mc-detail-panel" style="padding:8px 24px 120px; min-height:100%; touch-action:pan-y;">
       ${backBar()}
       ${body}
-    </div>`;
-}
-
-// ===================== DISCOVER MAP SUB-VIEW =====================
-// Read-only map of nearby shops. Opened from the List/Map toggle on Discover.
-// The canvas (#mc-map-canvas) is filled by the Google Maps SDK in map.js.
-export function discoverMapView(state) {
-  const nb = state.nearby;
-  let statusOverlay = '';
-  if (nb.status === 'loading' || nb.status === 'idle') {
-    statusOverlay = `<div style="position:absolute; inset:0; z-index:6; display:flex; align-items:center; justify-content:center; background:rgba(227,214,195,0.75);">${loadingBlock('Loading nearby shops…')}</div>`;
-  } else if (nb.status === 'error') {
-    const retry = state.userCoords ? 'retry-nearby' : 'use-location';
-    const label = state.userCoords ? 'Try again' : 'Use my location';
-    statusOverlay = `<div style="position:absolute; inset:0; z-index:6; display:flex; align-items:center; justify-content:center; background:rgba(227,214,195,0.92); padding:24px;">${errorBlock(nb.error || 'Could not load nearby shops.', retry, label)}</div>`;
-  } else if (!nb.shops.length) {
-    statusOverlay = `<div style="position:absolute; inset:0; z-index:6; display:flex; align-items:center; justify-content:center; background:rgba(227,214,195,0.92); padding:24px;">${errorBlock('No coffee shops found near here.', 'retry-nearby')}</div>`;
-  }
-
-  return `
-    <div style="position:absolute; inset:0; overflow:hidden; background:#E3D6C3;">
-      <div id="mc-map-canvas" style="position:absolute; inset:0;"></div>
-      ${statusOverlay}
-      <div id="mc-map-overlay" style="position:absolute; inset:0; z-index:8; pointer-events:none;">
-        <div style="pointer-events:auto; position:absolute; top:14px; left:16px; right:16px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <button data-act="set-discover-view" data-view="list" style="display:flex; align-items:center; gap:8px; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); border:1px solid #E4D9CB; border-radius:14px; padding:10px 14px; box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; font-size:13px; font-weight:600; color:#2E2017;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>
-            <span>List</span>
-          </button>
-          ${discoverViewToggle('map')}
-        </div>
-        <button data-act="map-locate-me" type="button" aria-label="Center on my location" style="pointer-events:auto; touch-action:manipulation; position:absolute; right:16px; bottom:168px; z-index:10; width:46px; height:46px; border-radius:14px; border:1px solid #E4D9CB; background:rgba(246,240,232,0.94); backdrop-filter:blur(8px); box-shadow:0 8px 24px -10px rgba(46,32,23,0.3); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2E2017" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-        </button>
-        <div id="mc-map-card" style="pointer-events:auto; position:absolute; left:16px; right:16px; bottom:16px; z-index:9;">${mapCard(state)}</div>
-      </div>
-    </div>`;
-}
-
-// Bottom detail card. Re-rendered on selection without touching the map.
-export function mapCard(state) {
-  const shops = state.nearby.shops || [];
-  if (!shops.length) return '';
-  const sel = shops.find(s => s.id === state.selected) || shops[0];
-  return `
-    <div style="background:#FFFCF7; border:1px solid #EADFD0; border-radius:22px; padding:16px; box-shadow:0 18px 40px -14px rgba(46,32,23,0.45); animation:mc-slideup 0.4s cubic-bezier(0.2,0.7,0.2,1);">
-      <div style="display:flex; gap:14px; align-items:center;">
-        <div style="width:78px; height:78px; flex:0 0 auto; border-radius:16px; background:${sel.tone}; position:relative; overflow:hidden;">
-          ${photoImg(sel)}
-          <div style="position:absolute; inset:0; background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 11px);"></div>
-        </div>
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:#A98C6B; font-weight:600; margin-bottom:4px;">${esc(sel.specialty)}${sel.hood ? ' · ' + esc(sel.hood) : ''}</div>
-          <div style="font-family:'Libre Caslon Display',serif; font-size:23px; line-height:1.0; color:#2E2017; margin-bottom:7px;">${esc(sel.name)}</div>
-          ${metaLine(sel, false)}
-        </div>
-        <button data-act="toggle-fav" data-id="${esc(sel.id)}" style="flex:0 0 auto; background:none; border:none; cursor:pointer; padding:6px; align-self:flex-start;">
-          ${heartSvg(22, sel.heartFill, sel.heartStroke)}
-        </button>
-      </div>
-      <button data-act="directions" data-id="${esc(sel.id)}" style="margin-top:14px; width:100%; border:none; background:#2E2017; color:#F6F0E8; font-weight:600; font-size:14px; padding:13px; border-radius:13px; cursor:pointer;">Directions${sel.distStr ? ' · ' + esc(sel.distStr) : ''}</button>
     </div>`;
 }
 
